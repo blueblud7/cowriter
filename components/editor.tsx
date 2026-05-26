@@ -48,10 +48,20 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
     setScaleLabel(Math.round(scale * 100));
   }, []);
 
-  const resetCanvas = useCallback(() => {
-    tfRef.current = { x: 0, y: 0, scale: 1 };
+  const centerCanvas = useCallback(() => {
+    if (!stageRef.current) return;
+    const stageW = stageRef.current.offsetWidth;
+    tfRef.current = {
+      x: Math.max(40, (stageW - 680) / 2),
+      y: 60,
+      scale: 1,
+    };
     applyTf();
   }, [applyTf]);
+
+  const resetCanvas = useCallback(() => {
+    centerCanvas();
+  }, [centerCanvas]);
 
   useEffect(() => {
     const el = stageRef.current;
@@ -107,6 +117,12 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
     window.addEventListener('keyup', onUp);
     return () => { window.removeEventListener('keydown', onDown); window.removeEventListener('keyup', onUp); };
   }, [applyTf, resetCanvas]);
+
+  useEffect(() => {
+    centerCanvas();
+    window.addEventListener('resize', centerCanvas);
+    return () => window.removeEventListener('resize', centerCanvas);
+  }, [centerCanvas]);
 
   const onStageMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     const tgt = e.target as HTMLElement;
