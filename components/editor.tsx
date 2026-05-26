@@ -17,9 +17,13 @@ interface EditorScreenProps {
   onStyleClick: (id: string) => void;
   onSave?: (body: string) => void;
   onBodyChange?: (body: string) => void;
+  tone?: string;
+  length?: string;
+  onToneChange?: (v: string) => void;
+  onLengthChange?: (v: string) => void;
 }
 
-export function EditorScreen({ t, lang, level, chapter, sample, styles, starters, onTransform, onFocus, onAnalyze, onStyleClick, onSave, onBodyChange }: EditorScreenProps) {
+export function EditorScreen({ t, lang, level, chapter, sample, styles, starters, onTransform, onFocus, onAnalyze, onStyleClick, onSave, onBodyChange, tone = 'neutral', length = 'keep', onToneChange, onLengthChange }: EditorScreenProps) {
   const [title, setTitle] = useState(chapter.title);
   const [body, setBody] = useState(sample.raw);
   const [styleQuery, setStyleQuery] = useState('');
@@ -139,17 +143,23 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
               <div className="rail-control">
                 <div className="rail-control-label">{t.sp_tone}</div>
                 <div className="rail-seg">
-                  <button data-on="0">{t.sp_tone_warm}</button>
-                  <button data-on="1">{t.sp_tone_neutral}</button>
-                  <button data-on="0">{t.sp_tone_cool}</button>
+                  {(['warm', 'neutral', 'cool'] as const).map((v, i) => (
+                    <button key={v} data-on={tone === v ? '1' : '0'}
+                            onClick={() => onToneChange?.(v)}>
+                      {[t.sp_tone_warm, t.sp_tone_neutral, t.sp_tone_cool][i]}
+                    </button>
+                  ))}
                 </div>
               </div>
               <div className="rail-control">
                 <div className="rail-control-label">{t.sp_length}</div>
                 <div className="rail-seg">
-                  <button data-on="0">{t.sp_len_short}</button>
-                  <button data-on="1">{t.sp_len_keep}</button>
-                  <button data-on="0">{t.sp_len_long}</button>
+                  {(['short', 'keep', 'long'] as const).map((v, i) => (
+                    <button key={v} data-on={length === v ? '1' : '0'}
+                            onClick={() => onLengthChange?.(v)}>
+                      {[t.sp_len_short, t.sp_len_keep, t.sp_len_long][i]}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>

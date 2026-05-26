@@ -11,11 +11,13 @@ interface DiffViewProps {
   sample: Sample;
   notes: string[];
   chapterTitle?: string;
+  tone?: string;
+  length?: string;
   onAccept: (text: string) => void;
   onClose: () => void;
 }
 
-export function DiffView({ t, lang, styleId, styles, sample, notes, chapterTitle, onAccept, onClose }: DiffViewProps) {
+export function DiffView({ t, lang, styleId, styles, sample, notes, chapterTitle, tone = 'neutral', length = 'keep', onAccept, onClose }: DiffViewProps) {
   const style = styles.find(s => s.id === styleId) || styles[0];
   const rawLines = sample.raw.split(/(?<=[.!?。!?])\s+/).filter(Boolean);
   const [aiResult, setAiResult] = useState<string | null>(null);
@@ -31,7 +33,7 @@ export function DiffView({ t, lang, styleId, styles, sample, notes, chapterTitle
     fetch('/api/transform', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: sample.raw, style: styleId, lang }),
+      body: JSON.stringify({ text: sample.raw, style: styleId, lang, tone, length }),
     })
       .then(r => r.json())
       .then(d => {

@@ -46,6 +46,8 @@ export default function CoWriterApp() {
   const [selectedStyleId, setSelectedStyleId] = useState('literary');
   const [showSettings, setShowSettings] = useState(false);
   const [diffBodyRaw, setDiffBodyRaw] = useState('');
+  const [selectedTone, setSelectedTone] = useState('neutral');
+  const [selectedLength, setSelectedLength] = useState('keep');
   const liveBodyRef = useRef<string>('');
 
   const t = T[lang];
@@ -234,6 +236,8 @@ export default function CoWriterApp() {
             }}
             onSave={handleSaveBody}
             onBodyChange={(body) => { liveBodyRef.current = body; }}
+            tone={selectedTone} length={selectedLength}
+            onToneChange={setSelectedTone} onLengthChange={setSelectedLength}
           />
         )}
 
@@ -243,6 +247,7 @@ export default function CoWriterApp() {
             styleId={selectedStyleId} styles={STYLES}
             sample={{ ...editorSample, raw: diffBodyRaw || editorSample.raw }} notes={notes}
             chapterTitle={currentChapter?.title}
+            tone={selectedTone} length={selectedLength}
             onAccept={handleAcceptTransform}
             onClose={() => setRoute('editor')}
           />
