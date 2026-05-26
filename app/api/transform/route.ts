@@ -24,8 +24,11 @@ export async function POST(req: NextRequest) {
   try {
     const { text, style, tone, length, lang } = await req.json();
 
-    if (!text || !style) {
+    if (text == null || !style) {
       return NextResponse.json({ error: 'Missing text or style' }, { status: 400 });
+    }
+    if (!text.trim()) {
+      return NextResponse.json({ result: '' });
     }
 
     const styleGuide = STYLE_PROMPTS[style] || STYLE_PROMPTS.literary;
