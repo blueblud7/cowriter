@@ -233,7 +233,7 @@ export function DashboardScreen({ t, lang, level, chapters, setCurrentChapter, s
           <div className="starter-grid">
             {starters.slice(0, level === 'beginner' ? 6 : 3).map((s, i) => (
               <button key={i} className="starter-card"
-                      onClick={() => { setCurrentChapter(chapters[0].id); setRoute('editor'); }}>
+                      onClick={() => { if (chapters[0]) { setCurrentChapter(chapters[0].id); setRoute('editor'); } }}>
                 <span className="starter-tag">{s.tag}</span>
                 <span className="starter-title">{s.title}</span>
                 <span className="starter-body">{s.body}</span>

@@ -160,6 +160,7 @@ export default function CoWriterApp() {
   }
 
   if (route === 'focus') {
+    if (!currentChapter) { setRoute('dashboard'); return null; }
     return (
       <FocusScreen
         t={t} lang={lang} chapter={currentChapter} sample={editorSample}
@@ -190,7 +191,7 @@ export default function CoWriterApp() {
           />
         )}
 
-        {route === 'editor' && (
+        {route === 'editor' && currentChapter && (
           <EditorScreen
             t={t} lang={lang} level={level}
             chapter={currentChapter} sample={editorSample}
