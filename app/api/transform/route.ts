@@ -1,7 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { NextRequest, NextResponse } from 'next/server';
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const STYLE_PROMPTS: Record<string, string> = {
   literary:       'Rewrite in a lyrical, observational literary style — rich imagery, layered prose, and a slow, contemplative rhythm.',
@@ -35,8 +35,8 @@ export async function POST(req: NextRequest) {
       ? ' The text is in Korean — preserve the Korean language in your output.'
       : ' The text is in English — preserve the English language in your output.';
 
-    const message = await client.messages.create({
-      model: 'claude-opus-4-7',
+    const response = await client.chat.completions.create({
+      model: 'gpt-5-nano',
       max_tokens: 2048,
       messages: [{
         role: 'user',
@@ -49,12 +49,12 @@ ${text}`,
       }],
     });
 
-    const content = message.content[0];
-    if (content.type !== 'text') {
-      return NextResponse.json({ error: 'Unexpected response type' }, { status: 500 });
+    const result = response.choices[0]?.message?.content;
+    if (!result) {
+      return NextResponse.json({ error: 'Empty response' }, { status: 500 });
     }
 
-    return NextResponse.json({ result: content.text });
+    return NextResponse.json({ result });
   } catch (err) {
     console.error('Transform error:', err);
     return NextResponse.json({ error: 'Transform failed' }, { status: 500 });
