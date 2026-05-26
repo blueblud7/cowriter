@@ -43,8 +43,8 @@ export async function POST(req: NextRequest) {
       : ' The text is in English — preserve the English language in your output.';
 
     const response = await getClient().chat.completions.create({
-      model: 'gpt-5.4-nano',
-      max_tokens: 2048,
+      model: 'gpt-5-nano',
+      max_completion_tokens: 2048,
       messages: [{
         role: 'user',
         content: `${styleGuide}${toneNote}${lengthNote}${langNote}
