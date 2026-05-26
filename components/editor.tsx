@@ -156,18 +156,32 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
               <div className="rail-section">
                 <div className="rail-h"><span>{lang === 'kr' ? '문서' : 'Document'}</span></div>
                 <div className="rail-stats">
-                  <div className="rail-stat">
-                    <span className="rail-stat-label">{lang === 'kr' ? '평균 문장 길이' : 'Avg sentence'}</span>
-                    <span className="rail-stat-val">14.2</span>
-                  </div>
-                  <div className="rail-stat">
-                    <span className="rail-stat-label">{lang === 'kr' ? '읽기 시간' : 'Read time'}</span>
-                    <span className="rail-stat-val">2:14</span>
-                  </div>
-                  <div className="rail-stat">
-                    <span className="rail-stat-label">{lang === 'kr' ? '난이도' : 'Reading level'}</span>
-                    <span className="rail-stat-val">{lang === 'kr' ? '중2' : 'Grade 8'}</span>
-                  </div>
+                  {(() => {
+                    const sents = body.split(/[.!?。！？]+/).map(s => s.trim()).filter(Boolean);
+                    const wc = body.trim() ? body.trim().split(/\s+/).length : 0;
+                    const avgSent = sents.length > 0 ? Math.round(wc / sents.length) : 0;
+                    const wpm = lang === 'kr' ? 200 : 250;
+                    const secs = Math.round((wc / wpm) * 60);
+                    const readTime = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+                    const unique = new Set(body.toLowerCase().split(/\s+/).filter(Boolean)).size;
+                    const diversity = wc > 0 ? (unique / wc).toFixed(2) : '0.00';
+                    return (
+                      <>
+                        <div className="rail-stat">
+                          <span className="rail-stat-label">{lang === 'kr' ? '평균 문장 길이' : 'Avg sentence'}</span>
+                          <span className="rail-stat-val">{avgSent}</span>
+                        </div>
+                        <div className="rail-stat">
+                          <span className="rail-stat-label">{lang === 'kr' ? '읽기 시간' : 'Read time'}</span>
+                          <span className="rail-stat-val">{readTime}</span>
+                        </div>
+                        <div className="rail-stat">
+                          <span className="rail-stat-label">{lang === 'kr' ? '어휘 다양성' : 'Vocabulary'}</span>
+                          <span className="rail-stat-val">{diversity}</span>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             )}

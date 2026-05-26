@@ -140,9 +140,9 @@ export default function CoWriterApp() {
     setRoute('editor');
   };
 
-  // DB 챕터를 에디터용 sample로 변환
+  // DB body를 그대로 사용 (빈 string도 유효 — || 대신 ?? 사용)
   const editorSample = currentRow
-    ? { ...sample, raw: currentRow.body || sample.raw }
+    ? { ...sample, raw: currentRow.body ?? '' }
     : sample;
 
   if (route === 'auth') {
@@ -208,6 +208,7 @@ export default function CoWriterApp() {
             t={t} lang={lang}
             styleId={selectedStyleId} styles={STYLES}
             sample={editorSample} notes={notes}
+            chapterTitle={currentChapter?.title}
             onAccept={handleAcceptTransform}
             onClose={() => setRoute('editor')}
           />
@@ -216,8 +217,10 @@ export default function CoWriterApp() {
         {route === 'analysis' && (
           <AnalysisScreen
             t={t} lang={lang} styles={STYLES}
+            sample={editorSample}
+            chapterTitle={currentChapter?.title}
             onClose={() => setRoute('editor')}
-            onApply={() => { setSelectedStyleId('literary'); setRoute('diff'); }}
+            onApply={(styleId) => { setSelectedStyleId(styleId || 'literary'); setRoute('diff'); }}
           />
         )}
 

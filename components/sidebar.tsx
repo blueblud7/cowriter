@@ -170,32 +170,31 @@ export function DashboardScreen({ t, lang, level, chapters, setCurrentChapter, s
           </div>
         </div>
 
-        <div className="dash-stats">
-          <div className="stat-card">
-            <span className="stat-label">{t.dash_stats_words}</span>
-            <span className="stat-value">4,885</span>
-            <span className="stat-trend">↑ 12% {lang === 'kr' ? '지난주 대비' : 'vs last week'}</span>
-            <Spark data={[20, 35, 22, 48, 32, 56, 64]} color="var(--accent)" />
-          </div>
-          <div className="stat-card">
-            <span className="stat-label">{t.dash_stats_streak}</span>
-            <span className="stat-value">7</span>
-            <span className="stat-trend">{lang === 'kr' ? '🔥 일주일째' : '🔥 a full week'}</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-label">{t.dash_stats_styled}</span>
-            <span className="stat-value">14</span>
-            <span className="stat-trend">{lang === 'kr' ? '문학적 · 6회' : 'Literary · 6×'}</span>
-            <Spark data={[2, 1, 3, 2, 4, 1, 5]} color="var(--accent)" />
-          </div>
-          {level === 'pro' && (
-            <div className="stat-card">
-              <span className="stat-label">{lang === 'kr' ? '집중 시간' : 'Focus time'}</span>
-              <span className="stat-value">3:42</span>
-              <span className="stat-trend">{lang === 'kr' ? '오늘 누적' : 'today'}</span>
+        {(() => {
+          const totalWords = chapters.reduce((s, c) => s + c.words, 0);
+          const styledCount = chapters.filter(c => c.status === 'styled').length;
+          const draftCount = chapters.filter(c => c.status === 'draft').length;
+          return (
+            <div className="dash-stats">
+              <div className="stat-card">
+                <span className="stat-label">{t.dash_stats_words}</span>
+                <span className="stat-value">{totalWords.toLocaleString()}</span>
+                <span className="stat-trend">{lang === 'kr' ? `${chapters.filter(c=>c.status!=='new').length}개 챕터` : `across ${chapters.filter(c=>c.status!=='new').length} chapters`}</span>
+                <Spark data={chapters.slice(-7).map(c => c.words || 0).concat(Array(7).fill(0)).slice(0, 7)} color="var(--accent)" />
+              </div>
+              <div className="stat-card">
+                <span className="stat-label">{t.dash_stats_streak}</span>
+                <span className="stat-value">{draftCount + styledCount}</span>
+                <span className="stat-trend">{lang === 'kr' ? '작성된 챕터' : 'chapters written'}</span>
+              </div>
+              <div className="stat-card">
+                <span className="stat-label">{t.dash_stats_styled}</span>
+                <span className="stat-value">{styledCount}</span>
+                <span className="stat-trend">{lang === 'kr' ? '스타일 변환됨' : 'styled chapters'}</span>
+              </div>
             </div>
-          )}
-        </div>
+          );
+        })()}
 
         <h2 className="dash-h2">
           {t.dash_recent}
