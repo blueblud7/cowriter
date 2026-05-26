@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { AuthScreen, type AuthUser } from '@/components/auth';
 import { OnboardingScreen } from '@/components/onboarding';
 import { Sidebar, DashboardScreen } from '@/components/sidebar';
 import { EditorScreen, StylePicker } from '@/components/editor';
@@ -16,7 +17,8 @@ export default function CoWriterApp() {
   const [palette, setPalette] = useState<Palette>('twilight');
   const [typeset, setTypeset] = useState<Typeset>('manuscript');
   const [dark, setDark] = useState(false);
-  const [route, setRoute] = useState<Route>('onboarding');
+  const [route, setRoute] = useState<Route>('auth');
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [currentChapter, setCurrentChapter] = useState('ch1');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selectedStyleId, setSelectedStyleId] = useState('literary');
@@ -47,6 +49,15 @@ export default function CoWriterApp() {
     setSelectedStyleId(id);
     setRoute('diff');
   };
+
+  if (route === 'auth') {
+    return (
+      <AuthScreen
+        t={t} lang={lang}
+        onSignedIn={(u) => { setUser(u); setRoute('onboarding'); }}
+      />
+    );
+  }
 
   if (route === 'onboarding') {
     return (

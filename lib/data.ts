@@ -30,7 +30,7 @@ export interface Premise {
 export type Level = 'beginner' | 'growing' | 'pro';
 export type Palette = 'paper' | 'sunset' | 'sage' | 'twilight';
 export type Typeset = 'manuscript' | 'editorial' | 'modern';
-export type Route = 'onboarding' | 'dashboard' | 'editor' | 'diff' | 'analysis' | 'focus' | 'bible';
+export type Route = 'auth' | 'onboarding' | 'dashboard' | 'editor' | 'diff' | 'analysis' | 'focus' | 'bible';
 
 export interface Style {
   id: string; icon: string; hue: number; swatch: string;
