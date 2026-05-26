@@ -22,23 +22,30 @@ export function DiffView({ t, lang, styleId, styles, sample, notes, chapterTitle
   const [loading, setLoading] = useState(true);
   const [hovered, setHovered] = useState(0);
 
+  const [transformError, setTransformError] = useState<string | null>(null);
+
   useEffect(() => {
     setLoading(true);
     setAiResult(null);
+    setTransformError(null);
     fetch('/api/transform', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: sample.raw, style: styleId, lang }),
     })
       .then(r => r.json())
-      .then(d => { setAiResult(d.result || null); setLoading(false); })
+      .then(d => {
+        if (d.error) { setTransformError(d.error); setLoading(false); return; }
+        setAiResult(d.result ?? null);
+        setLoading(false);
+      })
       .catch(() => {
-        setAiResult((sample as Record<string, string>)[styleId] || sample.literary || sample.raw);
+        setTransformError(lang === 'kr' ? '변환에 실패했어요. 다시 시도해보세요.' : 'Transform failed. Please try again.');
         setLoading(false);
       });
   }, [sample.raw, styleId, lang]);
 
-  const styledRaw = aiResult ?? ((sample as Record<string, string>)[styleId] || sample.literary || sample.raw);
+  const styledRaw = aiResult ?? '';
   const styledLines = styledRaw.split(/(?<=[.!?。!?])\s+/).filter(Boolean);
 
   return (
@@ -83,6 +90,16 @@ export function DiffView({ t, lang, styleId, styles, sample, notes, chapterTitle
               <span className="diff-col-meta">{styledLines.length} {lang === 'kr' ? '문장' : 'sentences'}</span>
             </div>
             <div className="diff-col-body">
+              {transformError && (
+                <p style={{ padding: '16px 12px', fontSize: 13, color: 'var(--negative)', opacity: 0.8 }}>
+                  ⚠ {transformError}
+                </p>
+              )}
+              {loading && !transformError && (
+                <p style={{ padding: '16px 12px', fontSize: 13, color: 'var(--ink-3)' }}>
+                  {lang === 'kr' ? '변환 중…' : 'Transforming…'}
+                </p>
+              )}
               {styledLines.map((l, i) => (
                 <p key={i}
                    className="diff-line diff-line-after"
