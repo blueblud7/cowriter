@@ -113,7 +113,16 @@ export function AuthScreen({ t, lang, onSignedIn }: AuthScreenProps) {
         onSignedIn({ email, name: name || email.split('@')[0] });
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '오류가 발생했어요.');
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('Email not confirmed')) {
+        setError(lang === 'kr'
+          ? '이메일 인증이 필요해요. 받은 편지함을 확인하거나, 아래 "둘러보기로 시작"을 눌러 게스트로 이용해보세요.'
+          : 'Please confirm your email first. Check your inbox, or use "Take a look around" as a guest.');
+      } else if (msg.includes('Invalid login credentials')) {
+        setError(lang === 'kr' ? '이메일 또는 비밀번호가 올바르지 않아요.' : 'Incorrect email or password.');
+      } else {
+        setError(msg || (lang === 'kr' ? '오류가 발생했어요.' : 'Something went wrong.'));
+      }
     } finally {
       setLoading(false);
     }
