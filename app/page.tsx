@@ -48,6 +48,7 @@ export default function CoWriterApp() {
   const [diffBodyRaw, setDiffBodyRaw] = useState('');
   const [selectedTone, setSelectedTone] = useState('neutral');
   const [selectedLength, setSelectedLength] = useState('keep');
+  const [initializing, setInitializing] = useState(true);
   const liveBodyRef = useRef<string>('');
 
   const t = T[lang];
@@ -111,6 +112,7 @@ export default function CoWriterApp() {
         await loadChapters(u.id);
         setRoute('dashboard');
       }
+      setInitializing(false);
     });
   }, [loadChapters]);
 
@@ -169,6 +171,15 @@ export default function CoWriterApp() {
   const editorSample = currentRow
     ? { ...sample, raw: currentRow.body ?? '' }
     : sample;
+
+  if (initializing) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 12, color: 'var(--ink-3)' }}>
+        <div style={{ fontSize: 28 }}>◐</div>
+        <div style={{ fontSize: 13 }}>{lang === 'kr' ? '불러오는 중…' : 'Loading…'}</div>
+      </div>
+    );
+  }
 
   if (route === 'auth') {
     return <AuthScreen t={t} lang={lang} onSignedIn={handleSignedIn} />;
