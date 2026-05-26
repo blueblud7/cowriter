@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { InkiMascot } from './mascot';
 import type { Level, Lang, Chapter, Style, Starter, Sample, T } from '@/lib/data';
 
@@ -27,19 +27,58 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
   const [title, setTitle] = useState(chapter.title);
   const [body, setBody] = useState(sample.raw);
   const [styleQuery, setStyleQuery] = useState('');
+  const [suggestion, setSuggestion] = useState('');
+  const [suggesting, setSuggesting] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suggestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setTitle(chapter.title);
     setBody(sample.raw);
   }, [chapter.id, sample.raw]);
 
+  const fetchSuggestion = useCallback(async (text: string) => {
+    if (text.trim().length < 15) return;
+    setSuggesting(true);
+    try {
+      const res = await fetch('/api/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, lang }),
+      });
+      const data = await res.json();
+      if (data.completion) setSuggestion(data.completion);
+    } catch {}
+    setSuggesting(false);
+  }, [lang]);
+
   const handleBodyChange = (val: string) => {
     setBody(val);
     onBodyChange?.(val);
+    setSuggestion('');
+    if (suggestTimer.current) clearTimeout(suggestTimer.current);
+    if (val.trim().length >= 15) {
+      suggestTimer.current = setTimeout(() => fetchSuggestion(val), 1200);
+    }
     if (onSave) {
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => onSave(val), 1500);
+    }
+  };
+
+  const acceptSuggestion = () => {
+    if (!suggestion) return;
+    const sep = body && !body.endsWith(' ') && !body.endsWith('\n') ? ' ' : '';
+    handleBodyChange(body + sep + suggestion);
+    setSuggestion('');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Tab' && suggestion) {
+      e.preventDefault();
+      acceptSuggestion();
+    } else if (suggestion && e.key !== 'Shift') {
+      setSuggestion('');
     }
   };
 
@@ -86,9 +125,36 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
             className="manuscript-body"
             value={body}
             onChange={(e) => handleBodyChange(e.target.value)}
+            onKeyDown={handleKeyDown}
             placeholder={lang === 'kr' ? '한 문장으로 시작해 보세요...' : 'Start with a single sentence...'}
             spellCheck={false}
           />
+
+          {(suggestion || suggesting) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, padding: '8px 12px', background: 'var(--surface-2)', borderRadius: 8, fontSize: 13 }}>
+              {suggesting ? (
+                <span style={{ color: 'var(--ink-4)', fontStyle: 'italic' }}>
+                  {lang === 'kr' ? 'Inki가 생각 중…' : 'Inki is thinking…'}
+                </span>
+              ) : (
+                <>
+                  <span style={{ color: 'var(--ink-3)', fontStyle: 'italic', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {suggestion}
+                  </span>
+                  <button
+                    onClick={acceptSuggestion}
+                    style={{ padding: '2px 8px', fontSize: 11, background: 'var(--accent)', color: 'var(--accent-ink, #fff)', border: 'none', borderRadius: 5, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    Tab ↵
+                  </button>
+                  <button
+                    onClick={() => setSuggestion('')}
+                    style={{ padding: '2px 6px', fontSize: 11, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--ink-4)' }}>
+                    ✕
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           {level === 'beginner' && (
             <div className="ed-starters">

@@ -30,22 +30,39 @@ export function DiffView({ t, lang, styleId, styles, sample, notes, chapterTitle
     setLoading(true);
     setAiResult(null);
     setTransformError(null);
-    fetch('/api/transform', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: sample.raw, style: styleId, lang, tone, length }),
-    })
-      .then(r => r.json())
-      .then(d => {
-        if (d.error) { setTransformError(d.error); setLoading(false); return; }
-        setAiResult(d.result ?? null);
-        setLoading(false);
-      })
-      .catch(() => {
-        setTransformError(lang === 'kr' ? '변환에 실패했어요. 다시 시도해보세요.' : 'Transform failed. Please try again.');
-        setLoading(false);
-      });
-  }, [sample.raw, styleId, lang]);
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch('/api/transform', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: sample.raw, style: styleId, lang, tone, length }),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          if (!cancelled) setTransformError(d.error || (lang === 'kr' ? '변환 실패' : 'Transform failed'));
+          return;
+        }
+        const reader = res.body?.getReader();
+        if (!reader) return;
+        const decoder = new TextDecoder();
+        let accumulated = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done || cancelled) break;
+          accumulated += decoder.decode(value, { stream: true });
+          setAiResult(accumulated);
+        }
+      } catch {
+        if (!cancelled) setTransformError(lang === 'kr' ? '변환에 실패했어요.' : 'Transform failed.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [sample.raw, styleId, lang, tone, length]);
 
   const styledRaw = aiResult ?? '';
   const styledLines = styledRaw.split(/(?<=[.!?。!?])\s+/).filter(Boolean);

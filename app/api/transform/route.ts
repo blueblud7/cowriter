@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 
 let client: OpenAI | null = null;
 function getClient() {
@@ -25,16 +25,15 @@ export async function POST(req: NextRequest) {
     const { text, style, tone, length, lang } = await req.json();
 
     if (text == null || !style) {
-      return NextResponse.json({ error: 'Missing text or style' }, { status: 400 });
+      return new Response(JSON.stringify({ error: 'Missing text or style' }), { status: 400 });
     }
     if (!text.trim()) {
-      return NextResponse.json({ result: '' });
+      return new Response('', { status: 200 });
     }
 
     const styleGuide = STYLE_PROMPTS[style] || STYLE_PROMPTS.literary;
     const toneNote = tone === 'warm' ? ' Lean warmer and more emotionally present.'
-                   : tone === 'cool' ? ' Lean cooler and more detached.'
-                   : '';
+                   : tone === 'cool' ? ' Lean cooler and more detached.' : '';
     const lengthNote = length === 'short' ? ' Be more concise than the original.'
                      : length === 'long'  ? ' Expand slightly — more texture and detail.'
                      : ' Keep the length similar to the original.';
@@ -42,9 +41,10 @@ export async function POST(req: NextRequest) {
       ? ' The text is in Korean — preserve the Korean language in your output.'
       : ' The text is in English — preserve the English language in your output.';
 
-    const response = await getClient().chat.completions.create({
+    const stream = await getClient().chat.completions.create({
       model: 'gpt-5-nano',
       max_completion_tokens: 2048,
+      stream: true,
       messages: [{
         role: 'user',
         content: `${styleGuide}${toneNote}${lengthNote}${langNote}
@@ -56,16 +56,29 @@ ${text}`,
       }],
     });
 
-    const msg = response.choices[0]?.message;
-    const result = msg?.content;
-    if (!result) {
-      console.error('Empty content. Full response:', JSON.stringify(response));
-      return NextResponse.json({ error: 'Empty response', debug: { finish_reason: response.choices[0]?.finish_reason, keys: msg ? Object.keys(msg) : [] } }, { status: 500 });
-    }
+    const encoder = new TextEncoder();
+    const readable = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const chunk of stream) {
+            const text = chunk.choices[0]?.delta?.content || '';
+            if (text) controller.enqueue(encoder.encode(text));
+          }
+        } finally {
+          controller.close();
+        }
+      },
+    });
 
-    return NextResponse.json({ result });
+    return new Response(readable, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        'X-Accel-Buffering': 'no',
+      },
+    });
   } catch (err) {
     console.error('Transform error:', err);
-    return NextResponse.json({ error: 'Transform failed' }, { status: 500 });
+    return new Response(JSON.stringify({ error: 'Transform failed' }), { status: 500 });
   }
 }
