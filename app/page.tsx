@@ -10,6 +10,7 @@ import {
   STYLES, STARTERS, CHAPTERS, SAMPLE, NOTES, T,
   type Lang, type Level, type Palette, type Typeset, type Route,
 } from '@/lib/data';
+import { supabase } from '@/lib/supabase';
 
 export default function CoWriterApp() {
   const [lang, setLang] = useState<Lang>('kr');
@@ -30,6 +31,15 @@ export default function CoWriterApp() {
   const sample = SAMPLE[lang];
   const notes = NOTES[lang];
   const chapter = chapters.find(c => c.id === currentChapter) || chapters[0];
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser({ email: session.user.email!, name: session.user.user_metadata?.name || session.user.email!.split('@')[0] });
+        setRoute('dashboard');
+      }
+    });
+  }, []);
 
   useEffect(() => {
     const html = document.documentElement;

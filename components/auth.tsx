@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { InkiMascot } from './mascot';
+import { supabase } from '@/lib/supabase';
 import type { Lang, T } from '@/lib/data';
 
 export interface AuthUser {
@@ -37,6 +38,7 @@ export function AuthScreen({ t, lang, onSignedIn }: AuthScreenProps) {
   const [remember, setRemember] = useState(true);
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const quote = QUOTES[lang][0];
 
@@ -92,14 +94,33 @@ export function AuthScreen({ t, lang, onSignedIn }: AuthScreenProps) {
     privacy: 'Privacy', termsLink: 'Terms', help: 'Help',
   };
 
-  const submit = (e?: React.FormEvent) => {
+  const submit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!email.trim()) return;
+    if (!email.trim() || !password.trim()) return;
     setLoading(true);
-    setTimeout(() => {
+    setError(null);
+    try {
+      if (mode === 'login') {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        onSignedIn({ email, name: data.user?.user_metadata?.name || email.split('@')[0] });
+      } else {
+        const { data, error } = await supabase.auth.signUp({
+          email, password,
+          options: { data: { name: name || email.split('@')[0] } },
+        });
+        if (error) throw error;
+        onSignedIn({ email, name: name || email.split('@')[0] });
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '오류가 발생했어요.');
+    } finally {
       setLoading(false);
-      onSignedIn({ email, name: name || email.split('@')[0] });
-    }, 600);
+    }
+  };
+
+  const signInWithProvider = async (provider: 'google' | 'apple') => {
+    await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: window.location.origin } });
   };
 
   return (
@@ -194,6 +215,12 @@ export function AuthScreen({ t, lang, onSignedIn }: AuthScreenProps) {
               </label>
             )}
 
+            {error && (
+              <div style={{ fontSize: 12, color: '#C0392B', background: '#FDF0EE', border: '1px solid #F5C6C0', borderRadius: 8, padding: '8px 12px' }}>
+                {error}
+              </div>
+            )}
+
             <button className="btn btn-primary auth-submit" type="submit" disabled={loading}>
               {loading ? '...' : (mode === 'login' ? S.login : S.signup)} →
             </button>
@@ -202,7 +229,7 @@ export function AuthScreen({ t, lang, onSignedIn }: AuthScreenProps) {
 
             <div className="auth-providers">
               <button type="button" className="auth-provider"
-                      onClick={() => onSignedIn({ email: 'demo@cowriter.app', name: 'Demo', provider: 'google' })}>
+                      onClick={() => signInWithProvider('google')}>
                 <span className="auth-provider-icon" aria-hidden="true">
                   <svg viewBox="0 0 24 24" width="16" height="16">
                     <path fill="#4285F4" d="M22.5 12.27c0-.79-.07-1.54-.2-2.27H12v4.51h5.92a5.07 5.07 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.21-4.74 3.21-8.33z"/>
@@ -215,7 +242,7 @@ export function AuthScreen({ t, lang, onSignedIn }: AuthScreenProps) {
               </button>
 
               <button type="button" className="auth-provider"
-                      onClick={() => onSignedIn({ email: 'demo@icloud.com', name: 'Demo', provider: 'apple' })}>
+                      onClick={() => signInWithProvider('apple')}>
                 <span className="auth-provider-icon" aria-hidden="true">
                   <svg viewBox="0 0 24 24" width="16" height="16">
                     <path fill="currentColor" d="M17.05 13c-.03-2.5 2.04-3.7 2.13-3.75-1.16-1.7-2.97-1.93-3.62-1.96-1.54-.16-3.01.91-3.79.91-.78 0-1.99-.89-3.27-.86-1.68.03-3.24.98-4.1 2.49-1.75 3.04-.45 7.53 1.25 9.99.84 1.2 1.83 2.55 3.12 2.5 1.25-.05 1.73-.81 3.24-.81 1.51 0 1.94.81 3.27.78 1.35-.02 2.21-1.22 3.04-2.43.96-1.4 1.36-2.75 1.38-2.82-.03-.01-2.65-1.02-2.68-4.04zM14.5 4.6c.69-.84 1.16-2 1.03-3.16-.99.04-2.2.66-2.92 1.5-.64.74-1.21 1.93-1.06 3.06 1.11.09 2.25-.56 2.95-1.4z"/>
