@@ -32,6 +32,104 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suggestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Canvas pan/zoom
+  const stageRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const tfRef = useRef({ x: 0, y: 0, scale: 1 });
+  const [scaleLabel, setScaleLabel] = useState(100);
+  const isPanning = useRef(false);
+  const spaceHeld = useRef(false);
+  const lastMouse = useRef({ x: 0, y: 0 });
+
+  const applyTf = useCallback(() => {
+    if (!canvasRef.current) return;
+    const { x, y, scale } = tfRef.current;
+    canvasRef.current.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+    setScaleLabel(Math.round(scale * 100));
+  }, []);
+
+  const resetCanvas = useCallback(() => {
+    tfRef.current = { x: 0, y: 0, scale: 1 };
+    applyTf();
+  }, [applyTf]);
+
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const rect = el.getBoundingClientRect();
+        const cx = e.clientX - rect.left;
+        const cy = e.clientY - rect.top;
+        const { x, y, scale } = tfRef.current;
+        const delta = e.deltaY * -0.004;
+        const newScale = Math.min(3, Math.max(0.25, scale + delta));
+        const ratio = newScale / scale;
+        tfRef.current = { x: cx - ratio * (cx - x), y: cy - ratio * (cy - y), scale: newScale };
+      } else {
+        tfRef.current.x -= e.deltaX;
+        tfRef.current.y -= e.deltaY;
+      }
+      applyTf();
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [applyTf]);
+
+  useEffect(() => {
+    const onDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !(e.target instanceof HTMLTextAreaElement) && !(e.target instanceof HTMLInputElement)) {
+        e.preventDefault(); spaceHeld.current = true;
+        if (stageRef.current) stageRef.current.style.cursor = 'grab';
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === '0') { e.preventDefault(); resetCanvas(); }
+      if ((e.metaKey || e.ctrlKey) && (e.key === '=' || e.key === '+')) {
+        e.preventDefault();
+        const s = Math.min(3, tfRef.current.scale + 0.1);
+        tfRef.current.scale = s; applyTf();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === '-') {
+        e.preventDefault();
+        const s = Math.max(0.25, tfRef.current.scale - 0.1);
+        tfRef.current.scale = s; applyTf();
+      }
+    };
+    const onUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        spaceHeld.current = false;
+        if (stageRef.current) stageRef.current.style.cursor = '';
+      }
+    };
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup', onUp);
+    return () => { window.removeEventListener('keydown', onDown); window.removeEventListener('keyup', onUp); };
+  }, [applyTf, resetCanvas]);
+
+  const onStageMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    const tgt = e.target as HTMLElement;
+    const onBg = tgt === stageRef.current || tgt === canvasRef.current;
+    if (onBg || spaceHeld.current || e.button === 1) {
+      e.preventDefault();
+      isPanning.current = true;
+      lastMouse.current = { x: e.clientX, y: e.clientY };
+      if (stageRef.current) stageRef.current.style.cursor = 'grabbing';
+    }
+  };
+  const onStageMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isPanning.current) return;
+    tfRef.current.x += e.clientX - lastMouse.current.x;
+    tfRef.current.y += e.clientY - lastMouse.current.y;
+    lastMouse.current = { x: e.clientX, y: e.clientY };
+    applyTf();
+  };
+  const onStageMouseUp = () => {
+    isPanning.current = false;
+    if (stageRef.current) stageRef.current.style.cursor = spaceHeld.current ? 'grab' : '';
+  };
+
   useEffect(() => {
     setTitle(chapter.title);
     setBody(sample.raw);
@@ -110,6 +208,13 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
       </div>
 
       <div className={`editor-shell editor-shell-${level}`}>
+        {/* Canvas stage */}
+        <div ref={stageRef} className="manuscript-stage"
+             onMouseDown={onStageMouseDown}
+             onMouseMove={onStageMouseMove}
+             onMouseUp={onStageMouseUp}
+             onMouseLeave={onStageMouseUp}>
+          <div ref={canvasRef} className="manuscript-canvas">
         <div className="manuscript">
           <input className="manuscript-title" value={title}
                  onChange={(e) => setTitle(e.target.value)}
@@ -177,6 +282,20 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
             </div>
           )}
         </div>
+          </div>{/* /manuscript-canvas */}
+
+          {/* Zoom controls */}
+          <div style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 4, background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, padding: '4px 8px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', zIndex: 10, userSelect: 'none' }}>
+            <button onClick={() => { tfRef.current.scale = Math.max(0.25, tfRef.current.scale - 0.1); applyTf(); }}
+              style={{ width: 24, height: 24, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: 'var(--ink-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+            <span style={{ fontSize: 12, color: 'var(--ink-3)', minWidth: 36, textAlign: 'center' }}>{scaleLabel}%</span>
+            <button onClick={() => { tfRef.current.scale = Math.min(3, tfRef.current.scale + 0.1); applyTf(); }}
+              style={{ width: 24, height: 24, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: 'var(--ink-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+            <div style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 4px' }} />
+            <button onClick={resetCanvas} title={lang === 'kr' ? '원래 크기로' : 'Reset zoom (⌘0)'}
+              style={{ width: 24, height: 24, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 13, color: 'var(--ink-3)' }}>↺</button>
+          </div>
+        </div>{/* /manuscript-stage */}
 
         {level !== 'beginner' && (
           <aside className="ed-rail">
