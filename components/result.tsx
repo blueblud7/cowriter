@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { InkiMascot } from './mascot';
 import type { Level, Lang, Chapter, Style, Sample, T } from '@/lib/data';
 
@@ -10,16 +10,35 @@ interface DiffViewProps {
   styles: Style[];
   sample: Sample;
   notes: string[];
-  onAccept: () => void;
+  onAccept: (text: string) => void;
   onClose: () => void;
 }
 
 export function DiffView({ t, lang, styleId, styles, sample, notes, onAccept, onClose }: DiffViewProps) {
   const style = styles.find(s => s.id === styleId) || styles[0];
   const rawLines = sample.raw.split(/(?<=[.!?。!?])\s+/).filter(Boolean);
-  const styledRaw = (sample as Record<string, string>)[styleId] || sample.literary || sample.raw;
-  const styledLines = styledRaw.split(/(?<=[.!?。!?])\s+/).filter(Boolean);
+  const [aiResult, setAiResult] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [hovered, setHovered] = useState(0);
+
+  useEffect(() => {
+    setLoading(true);
+    setAiResult(null);
+    fetch('/api/transform', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: sample.raw, style: styleId, lang }),
+    })
+      .then(r => r.json())
+      .then(d => { setAiResult(d.result || null); setLoading(false); })
+      .catch(() => {
+        setAiResult((sample as Record<string, string>)[styleId] || sample.literary || sample.raw);
+        setLoading(false);
+      });
+  }, [sample.raw, styleId, lang]);
+
+  const styledRaw = aiResult ?? ((sample as Record<string, string>)[styleId] || sample.literary || sample.raw);
+  const styledLines = styledRaw.split(/(?<=[.!?。!?])\s+/).filter(Boolean);
 
   return (
     <div className="diff-screen fade-in">
@@ -37,9 +56,10 @@ export function DiffView({ t, lang, styleId, styles, sample, notes, onAccept, on
             {style.icon}
           </span>
           <span>{style[lang].name}</span>
+          {loading && <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 6 }}>{lang === 'kr' ? '변환 중…' : 'Transforming…'}</span>}
         </div>
         <button className="btn btn-ghost" onClick={onClose}>{t.diff_revert}</button>
-        <button className="btn btn-primary" onClick={onAccept}>{t.diff_accept} ✓</button>
+        <button className="btn btn-primary" disabled={loading} onClick={() => onAccept(styledRaw)}>{t.diff_accept} ✓</button>
       </div>
 
       <div className="diff-body">
@@ -410,17 +430,29 @@ interface FocusScreenProps {
   chapter: Chapter;
   sample: Sample;
   onExit: () => void;
+  onSave?: (body: string) => void;
 }
 
-export function FocusScreen({ t, lang, chapter, sample, onExit }: FocusScreenProps) {
+export function FocusScreen({ t, lang, chapter, sample, onExit, onSave }: FocusScreenProps) {
   const [body, setBody] = useState(sample.raw);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wc = body.trim() ? body.trim().split(/\s+/).length : 0;
+
+  useEffect(() => { setBody(sample.raw); }, [sample.raw]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onExit(); };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [onExit]);
+
+  const handleChange = (val: string) => {
+    setBody(val);
+    if (onSave) {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => onSave(val), 1500);
+    }
+  };
 
   return (
     <div className="focus-frame fade-in">
@@ -431,7 +463,7 @@ export function FocusScreen({ t, lang, chapter, sample, onExit }: FocusScreenPro
         <textarea
           className="focus-body"
           value={body}
-          onChange={(e) => setBody(e.target.value)}
+          onChange={(e) => handleChange(e.target.value)}
           autoFocus
           spellCheck={false}
         />

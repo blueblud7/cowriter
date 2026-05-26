@@ -12,9 +12,10 @@ interface SidebarProps {
   route: Route;
   setRoute: (r: Route) => void;
   onLevelClick: () => void;
+  onNewChapter?: () => void;
 }
 
-export function Sidebar({ t, lang, level, chapters, currentChapter, setCurrentChapter, route, setRoute, onLevelClick }: SidebarProps) {
+export function Sidebar({ t, lang, level, chapters, currentChapter, setCurrentChapter, route, setRoute, onLevelClick, onNewChapter }: SidebarProps) {
   const levelLabels: Record<Level, string> = {
     beginner: t.lvl_beginner_name,
     growing:  t.lvl_growing_name,
@@ -71,7 +72,7 @@ export function Sidebar({ t, lang, level, chapters, currentChapter, setCurrentCh
 
       <div className="sidebar-section">
         <span>{t.nav_works}</span>
-        <button title={lang === 'kr' ? '새 챕터' : 'New chapter'}>+</button>
+        <button title={lang === 'kr' ? '새 챕터' : 'New chapter'} onClick={onNewChapter}>+</button>
       </div>
       <div className="chapter-list">
         {chapters.map((c) => (
@@ -149,7 +150,7 @@ export function DashboardScreen({ t, lang, level, chapters, setCurrentChapter, s
         <div className="spacer" />
         <span className="save-pill">{t.ed_save}</span>
         <button className="btn"
-                onClick={() => { setCurrentChapter(chapters[0].id); setRoute('editor'); }}>
+                onClick={() => { if (chapters[0]) { setCurrentChapter(chapters[0].id); setRoute('editor'); } }}>
           {t.dash_continue} →
         </button>
       </div>
@@ -222,7 +223,7 @@ export function DashboardScreen({ t, lang, level, chapters, setCurrentChapter, s
             </button>
           ))}
           <button className="chap-card chap-card-new"
-                  onClick={() => { setCurrentChapter(chapters.find(c => c.status === 'new')?.id || chapters[0].id); setRoute('editor'); }}>
+                  onClick={() => { const target = chapters.find(c => c.status === 'new') || chapters[0]; if (target) { setCurrentChapter(target.id); setRoute('editor'); } }}>
             <div className="new-plus">+</div>
             <div>{t.dash_new_chapter}</div>
           </button>

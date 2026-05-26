@@ -7,7 +7,7 @@ import { EditorScreen, StylePicker } from '@/components/editor';
 import { DiffView, AnalysisScreen, FocusScreen } from '@/components/result';
 import { StoryBibleScreen } from '@/components/bible';
 import {
-  STYLES, STARTERS, SAMPLE, NOTES, T,
+  STYLES, STARTERS, SAMPLE, NOTES, CHAPTERS, T,
   type Lang, type Level, type Palette, type Typeset, type Route, type Chapter,
 } from '@/lib/data';
 import { supabase } from '@/lib/supabase';
@@ -74,12 +74,24 @@ export default function CoWriterApp() {
 
   const handleSignedIn = useCallback(async (u: AuthUser) => {
     setUser(u);
+    if (u.guest) {
+      const guestRows: import('@/lib/chapters').ChapterRow[] = CHAPTERS[lang].map(c => ({
+        id: c.id, user_id: 'guest', n: c.n, title: c.title,
+        body: c.n === 1 ? SAMPLE[lang].raw : '',
+        words: c.words, status: c.status as 'draft' | 'styled' | 'new',
+        updated_at: new Date().toISOString(), created_at: new Date().toISOString(),
+      }));
+      setDbChapters(guestRows);
+      setCurrentChapterId(guestRows[0].id);
+      setRoute('onboarding');
+      return;
+    }
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id ?? null;
     setUserId(uid);
     if (uid) await loadChapters(uid);
     setRoute('onboarding');
-  }, [loadChapters]);
+  }, [loadChapters, lang]);
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -123,6 +135,15 @@ export default function CoWriterApp() {
     setPickerOpen(false);
     setRoute('diff');
   };
+  const handleAcceptTransform = (text: string) => {
+    if (text) handleSaveBody(text);
+    setRoute('editor');
+  };
+
+  // DB 챕터를 에디터용 sample로 변환
+  const editorSample = currentRow
+    ? { ...sample, raw: currentRow.body || sample.raw }
+    : sample;
 
   if (route === 'auth') {
     return <AuthScreen t={t} lang={lang} onSignedIn={handleSignedIn} />;
@@ -141,16 +162,12 @@ export default function CoWriterApp() {
   if (route === 'focus') {
     return (
       <FocusScreen
-        t={t} lang={lang} chapter={currentChapter} sample={sample}
+        t={t} lang={lang} chapter={currentChapter} sample={editorSample}
         onExit={() => setRoute('editor')}
+        onSave={handleSaveBody}
       />
     );
   }
-
-  // DB 챕터를 에디터용 sample로 변환
-  const editorSample = currentRow
-    ? { ...sample, raw: currentRow.body || sample.raw }
-    : sample;
 
   return (
     <div className="app">
@@ -160,6 +177,7 @@ export default function CoWriterApp() {
         setCurrentChapter={setCurrentChapterId}
         route={route} setRoute={setRoute}
         onLevelClick={() => setRoute('onboarding')}
+        onNewChapter={handleNewChapter}
       />
 
       <main className="main">
@@ -190,7 +208,7 @@ export default function CoWriterApp() {
             t={t} lang={lang}
             styleId={selectedStyleId} styles={STYLES}
             sample={editorSample} notes={notes}
-            onAccept={() => setRoute('editor')}
+            onAccept={handleAcceptTransform}
             onClose={() => setRoute('editor')}
           />
         )}
