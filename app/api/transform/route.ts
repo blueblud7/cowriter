@@ -1,7 +1,11 @@
 import OpenAI from 'openai';
 import { NextRequest, NextResponse } from 'next/server';
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+let client: OpenAI | null = null;
+function getClient() {
+  if (!client) client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return client;
+}
 
 const STYLE_PROMPTS: Record<string, string> = {
   literary:       'Rewrite in a lyrical, observational literary style — rich imagery, layered prose, and a slow, contemplative rhythm.',
@@ -35,7 +39,7 @@ export async function POST(req: NextRequest) {
       ? ' The text is in Korean — preserve the Korean language in your output.'
       : ' The text is in English — preserve the English language in your output.';
 
-    const response = await client.chat.completions.create({
+    const response = await getClient().chat.completions.create({
       model: 'gpt-5-nano',
       max_tokens: 2048,
       messages: [{
