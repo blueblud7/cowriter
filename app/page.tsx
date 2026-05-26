@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { AuthScreen, type AuthUser } from '@/components/auth';
 import { OnboardingScreen } from '@/components/onboarding';
 import { Sidebar, DashboardScreen } from '@/components/sidebar';
@@ -45,6 +45,8 @@ export default function CoWriterApp() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selectedStyleId, setSelectedStyleId] = useState('literary');
   const [showSettings, setShowSettings] = useState(false);
+  const [diffBodyRaw, setDiffBodyRaw] = useState('');
+  const liveBodyRef = useRef<string>('');
 
   const t = T[lang];
   const starters = STARTERS[lang];
@@ -54,6 +56,11 @@ export default function CoWriterApp() {
   const chapters: Chapter[] = dbChapters.map(r => rowToChapter(r, lang));
   const currentChapter = chapters.find(c => c.id === currentChapterId) || chapters[0];
   const currentRow = dbChapters.find(r => r.id === currentChapterId) || dbChapters[0];
+
+  // sync live body ref when chapter changes (DB value as baseline)
+  useEffect(() => {
+    liveBodyRef.current = currentRow?.body ?? '';
+  }, [currentRow?.id]);
 
   const loadChapters = useCallback(async (uid: string) => {
     try {
@@ -141,6 +148,12 @@ export default function CoWriterApp() {
 
   const handleTransform = () => setPickerOpen(true);
   const handleApplyStyle = (id: string) => {
+    const body = liveBodyRef.current || currentRow?.body || '';
+    if (!body.trim()) {
+      alert(lang === 'kr' ? '먼저 내용을 써봐요!' : 'Write something first!');
+      return;
+    }
+    setDiffBodyRaw(body);
     setSelectedStyleId(id);
     setPickerOpen(false);
     setRoute('diff');
@@ -212,8 +225,15 @@ export default function CoWriterApp() {
             onTransform={handleTransform}
             onFocus={() => setRoute('focus')}
             onAnalyze={() => setRoute('analysis')}
-            onStyleClick={(id) => { setSelectedStyleId(id); setRoute('diff'); }}
+            onStyleClick={(id) => {
+              const body = liveBodyRef.current || currentRow?.body || '';
+              if (!body.trim()) { alert(lang === 'kr' ? '먼저 내용을 써봐요!' : 'Write something first!'); return; }
+              setDiffBodyRaw(body);
+              setSelectedStyleId(id);
+              setRoute('diff');
+            }}
             onSave={handleSaveBody}
+            onBodyChange={(body) => { liveBodyRef.current = body; }}
           />
         )}
 
@@ -221,7 +241,7 @@ export default function CoWriterApp() {
           <DiffView
             t={t} lang={lang}
             styleId={selectedStyleId} styles={STYLES}
-            sample={editorSample} notes={notes}
+            sample={{ ...editorSample, raw: diffBodyRaw || editorSample.raw }} notes={notes}
             chapterTitle={currentChapter?.title}
             onAccept={handleAcceptTransform}
             onClose={() => setRoute('editor')}

@@ -16,9 +16,10 @@ interface EditorScreenProps {
   onAnalyze: () => void;
   onStyleClick: (id: string) => void;
   onSave?: (body: string) => void;
+  onBodyChange?: (body: string) => void;
 }
 
-export function EditorScreen({ t, lang, level, chapter, sample, styles, starters, onTransform, onFocus, onAnalyze, onStyleClick, onSave }: EditorScreenProps) {
+export function EditorScreen({ t, lang, level, chapter, sample, styles, starters, onTransform, onFocus, onAnalyze, onStyleClick, onSave, onBodyChange }: EditorScreenProps) {
   const [title, setTitle] = useState(chapter.title);
   const [body, setBody] = useState(sample.raw);
   const [styleQuery, setStyleQuery] = useState('');
@@ -31,6 +32,7 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
 
   const handleBodyChange = (val: string) => {
     setBody(val);
+    onBodyChange?.(val);
     if (onSave) {
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => onSave(val), 1500);
