@@ -56,9 +56,11 @@ ${text}`,
       }],
     });
 
-    const result = response.choices[0]?.message?.content;
+    const msg = response.choices[0]?.message;
+    const result = msg?.content;
     if (!result) {
-      return NextResponse.json({ error: 'Empty response' }, { status: 500 });
+      console.error('Empty content. Full response:', JSON.stringify(response));
+      return NextResponse.json({ error: 'Empty response', debug: { finish_reason: response.choices[0]?.finish_reason, keys: msg ? Object.keys(msg) : [] } }, { status: 500 });
     }
 
     return NextResponse.json({ result });
