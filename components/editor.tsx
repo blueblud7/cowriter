@@ -15,17 +15,27 @@ interface EditorScreenProps {
   onFocus: () => void;
   onAnalyze: () => void;
   onStyleClick: (id: string) => void;
+  onSave?: (body: string) => void;
 }
 
-export function EditorScreen({ t, lang, level, chapter, sample, styles, starters, onTransform, onFocus, onAnalyze, onStyleClick }: EditorScreenProps) {
+export function EditorScreen({ t, lang, level, chapter, sample, styles, starters, onTransform, onFocus, onAnalyze, onStyleClick, onSave }: EditorScreenProps) {
   const [title, setTitle] = useState(chapter.title);
   const [body, setBody] = useState(sample.raw);
   const [styleQuery, setStyleQuery] = useState('');
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setTitle(chapter.title);
     setBody(sample.raw);
   }, [chapter.id, sample.raw]);
+
+  const handleBodyChange = (val: string) => {
+    setBody(val);
+    if (onSave) {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => onSave(val), 1500);
+    }
+  };
 
   const wordCount = body.trim() ? body.trim().split(/\s+/).length : 0;
   const charCount = body.length;
@@ -69,7 +79,7 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
           <textarea
             className="manuscript-body"
             value={body}
-            onChange={(e) => setBody(e.target.value)}
+            onChange={(e) => handleBodyChange(e.target.value)}
             placeholder={lang === 'kr' ? '한 문장으로 시작해 보세요...' : 'Start with a single sentence...'}
             spellCheck={false}
           />
@@ -86,7 +96,7 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
               <div className="ed-starters-grid">
                 {starters.slice(0, 4).map((s, i) => (
                   <button key={i} className="starter-card"
-                          onClick={() => setBody(body + (body ? '\n\n' : '') + s.body)}>
+                          onClick={() => handleBodyChange(body + (body ? '\n\n' : '') + s.body)}>
                     <span className="starter-tag">{s.tag}</span>
                     <span className="starter-title">{s.title}</span>
                   </button>

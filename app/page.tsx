@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { AuthScreen, type AuthUser } from '@/components/auth';
 import { OnboardingScreen } from '@/components/onboarding';
 import { Sidebar, DashboardScreen } from '@/components/sidebar';
@@ -7,10 +7,29 @@ import { EditorScreen, StylePicker } from '@/components/editor';
 import { DiffView, AnalysisScreen, FocusScreen } from '@/components/result';
 import { StoryBibleScreen } from '@/components/bible';
 import {
-  STYLES, STARTERS, CHAPTERS, SAMPLE, NOTES, T,
-  type Lang, type Level, type Palette, type Typeset, type Route,
+  STYLES, STARTERS, SAMPLE, NOTES, T,
+  type Lang, type Level, type Palette, type Typeset, type Route, type Chapter,
 } from '@/lib/data';
 import { supabase } from '@/lib/supabase';
+import { fetchChapters, upsertChapter, createChapter, type ChapterRow } from '@/lib/chapters';
+
+function rowToChapter(row: ChapterRow, lang: Lang): Chapter {
+  const now = new Date(row.updated_at);
+  const diffMs = Date.now() - now.getTime();
+  const diffDays = Math.floor(diffMs / 86400000);
+  const updated = diffDays === 0
+    ? (lang === 'kr' ? `오늘 ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}` : `Today ${now.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' })}`)
+    : diffDays === 1 ? (lang === 'kr' ? '어제' : 'Yesterday')
+    : lang === 'kr' ? `${diffDays}일 전` : `${diffDays} days ago`;
+  return {
+    id: row.id,
+    n: row.n,
+    title: row.title || (lang === 'kr' ? '제목 없음' : 'Untitled'),
+    words: row.words,
+    status: row.status,
+    updated,
+  };
+}
 
 export default function CoWriterApp() {
   const [lang, setLang] = useState<Lang>('kr');
@@ -20,26 +39,59 @@ export default function CoWriterApp() {
   const [dark, setDark] = useState(false);
   const [route, setRoute] = useState<Route>('auth');
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [currentChapter, setCurrentChapter] = useState('ch1');
+  const [userId, setUserId] = useState<string | null>(null);
+  const [dbChapters, setDbChapters] = useState<ChapterRow[]>([]);
+  const [currentChapterId, setCurrentChapterId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selectedStyleId, setSelectedStyleId] = useState('literary');
   const [showSettings, setShowSettings] = useState(false);
 
   const t = T[lang];
-  const chapters = CHAPTERS[lang];
   const starters = STARTERS[lang];
   const sample = SAMPLE[lang];
   const notes = NOTES[lang];
-  const chapter = chapters.find(c => c.id === currentChapter) || chapters[0];
+
+  const chapters: Chapter[] = dbChapters.map(r => rowToChapter(r, lang));
+  const currentChapter = chapters.find(c => c.id === currentChapterId) || chapters[0];
+  const currentRow = dbChapters.find(r => r.id === currentChapterId) || dbChapters[0];
+
+  const loadChapters = useCallback(async (uid: string) => {
+    try {
+      const rows = await fetchChapters(uid);
+      if (rows.length === 0) {
+        // 신규 유저 — 첫 챕터 자동 생성
+        const first = await createChapter(uid, 1, lang === 'kr' ? '첫 번째 챕터' : 'Chapter One');
+        setDbChapters([first]);
+        setCurrentChapterId(first.id);
+      } else {
+        setDbChapters(rows);
+        setCurrentChapterId(rows[0].id);
+      }
+    } catch (e) {
+      console.error('챕터 로드 실패', e);
+    }
+  }, [lang]);
+
+  const handleSignedIn = useCallback(async (u: AuthUser) => {
+    setUser(u);
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id ?? null;
+    setUserId(uid);
+    if (uid) await loadChapters(uid);
+    setRoute('onboarding');
+  }, [loadChapters]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
-        setUser({ email: session.user.email!, name: session.user.user_metadata?.name || session.user.email!.split('@')[0] });
+        const u = session.user;
+        setUser({ email: u.email!, name: u.user_metadata?.name || u.email!.split('@')[0] });
+        setUserId(u.id);
+        await loadChapters(u.id);
         setRoute('dashboard');
       }
     });
-  }, []);
+  }, [loadChapters]);
 
   useEffect(() => {
     const html = document.documentElement;
@@ -49,31 +101,37 @@ export default function CoWriterApp() {
     html.setAttribute('lang', lang === 'kr' ? 'ko' : 'en');
   }, [palette, typeset, dark, lang]);
 
+  const handleSaveBody = useCallback(async (body: string) => {
+    if (!currentRow || !userId) return;
+    const updated = await upsertChapter({ ...currentRow, body });
+    setDbChapters(prev => prev.map(r => r.id === updated.id ? updated : r));
+  }, [currentRow, userId]);
+
+  const handleNewChapter = useCallback(async () => {
+    if (!userId) return;
+    const n = dbChapters.length + 1;
+    const title = lang === 'kr' ? `챕터 ${n}` : `Chapter ${n}`;
+    const row = await createChapter(userId, n, title);
+    setDbChapters(prev => [...prev, row]);
+    setCurrentChapterId(row.id);
+    setRoute('editor');
+  }, [userId, dbChapters.length, lang]);
+
   const handleTransform = () => setPickerOpen(true);
   const handleApplyStyle = (id: string) => {
     setSelectedStyleId(id);
     setPickerOpen(false);
     setRoute('diff');
   };
-  const handleStyleClick = (id: string) => {
-    setSelectedStyleId(id);
-    setRoute('diff');
-  };
 
   if (route === 'auth') {
-    return (
-      <AuthScreen
-        t={t} lang={lang}
-        onSignedIn={(u) => { setUser(u); setRoute('onboarding'); }}
-      />
-    );
+    return <AuthScreen t={t} lang={lang} onSignedIn={handleSignedIn} />;
   }
 
   if (route === 'onboarding') {
     return (
       <OnboardingScreen
-        t={t} lang={lang} level={level}
-        setLevel={setLevel}
+        t={t} lang={lang} level={level} setLevel={setLevel}
         onDone={() => setRoute('dashboard')}
         onSkip={() => setRoute('dashboard')}
       />
@@ -83,18 +141,23 @@ export default function CoWriterApp() {
   if (route === 'focus') {
     return (
       <FocusScreen
-        t={t} lang={lang} chapter={chapter} sample={sample}
+        t={t} lang={lang} chapter={currentChapter} sample={sample}
         onExit={() => setRoute('editor')}
       />
     );
   }
 
+  // DB 챕터를 에디터용 sample로 변환
+  const editorSample = currentRow
+    ? { ...sample, raw: currentRow.body || sample.raw }
+    : sample;
+
   return (
     <div className="app">
       <Sidebar
         t={t} lang={lang} level={level}
-        chapters={chapters} currentChapter={currentChapter}
-        setCurrentChapter={setCurrentChapter}
+        chapters={chapters} currentChapter={currentChapterId ?? ''}
+        setCurrentChapter={setCurrentChapterId}
         route={route} setRoute={setRoute}
         onLevelClick={() => setRoute('onboarding')}
       />
@@ -104,7 +167,7 @@ export default function CoWriterApp() {
           <DashboardScreen
             t={t} lang={lang} level={level}
             chapters={chapters} starters={starters}
-            setCurrentChapter={setCurrentChapter}
+            setCurrentChapter={setCurrentChapterId}
             setRoute={setRoute}
           />
         )}
@@ -112,12 +175,13 @@ export default function CoWriterApp() {
         {route === 'editor' && (
           <EditorScreen
             t={t} lang={lang} level={level}
-            chapter={chapter} sample={sample}
+            chapter={currentChapter} sample={editorSample}
             styles={STYLES} starters={starters}
             onTransform={handleTransform}
             onFocus={() => setRoute('focus')}
             onAnalyze={() => setRoute('analysis')}
-            onStyleClick={handleStyleClick}
+            onStyleClick={(id) => { setSelectedStyleId(id); setRoute('diff'); }}
+            onSave={handleSaveBody}
           />
         )}
 
@@ -125,7 +189,7 @@ export default function CoWriterApp() {
           <DiffView
             t={t} lang={lang}
             styleId={selectedStyleId} styles={STYLES}
-            sample={sample} notes={notes}
+            sample={editorSample} notes={notes}
             onAccept={() => setRoute('editor')}
             onClose={() => setRoute('editor')}
           />
@@ -143,7 +207,7 @@ export default function CoWriterApp() {
           <StoryBibleScreen
             t={t} lang={lang}
             onClose={() => setRoute('editor')}
-            onJumpToChapter={(id) => { setCurrentChapter(id); setRoute('editor'); }}
+            onJumpToChapter={(id) => { setCurrentChapterId(id); setRoute('editor'); }}
           />
         )}
       </main>
@@ -151,7 +215,7 @@ export default function CoWriterApp() {
       {pickerOpen && (
         <StylePicker
           t={t} lang={lang} styles={STYLES}
-          sample={sample} level={level}
+          sample={editorSample} level={level}
           onClose={() => setPickerOpen(false)}
           onApply={handleApplyStyle}
         />
@@ -159,12 +223,9 @@ export default function CoWriterApp() {
 
       {/* Floating settings panel */}
       <div style={{ position: 'fixed', bottom: 16, right: 16, zIndex: 200 }}>
-        <button
-          className="btn btn-ghost"
-          style={{ fontSize: 18, padding: '6px 10px', borderRadius: 8 }}
-          onClick={() => setShowSettings(v => !v)}
-          aria-label="Settings"
-        >⚙</button>
+        <button className="btn btn-ghost"
+                style={{ fontSize: 18, padding: '6px 10px', borderRadius: 8 }}
+                onClick={() => setShowSettings(v => !v)} aria-label="Settings">⚙</button>
         {showSettings && (
           <div className="card" style={{ position: 'absolute', bottom: 44, right: 0, padding: 16, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
