@@ -120,9 +120,19 @@ export default function CoWriterApp() {
   }, [currentRow, userId]);
 
   const handleNewChapter = useCallback(async () => {
-    if (!userId) return;
     const n = dbChapters.length + 1;
     const title = lang === 'kr' ? `챕터 ${n}` : `Chapter ${n}`;
+    if (!userId) {
+      const guestRow: import('@/lib/chapters').ChapterRow = {
+        id: `guest-${n}-${Date.now()}`, user_id: 'guest',
+        n, title, body: '', words: 0, status: 'new',
+        updated_at: new Date().toISOString(), created_at: new Date().toISOString(),
+      };
+      setDbChapters(prev => [...prev, guestRow]);
+      setCurrentChapterId(guestRow.id);
+      setRoute('editor');
+      return;
+    }
     const row = await createChapter(userId, n, title);
     setDbChapters(prev => [...prev, row]);
     setCurrentChapterId(row.id);
@@ -179,6 +189,9 @@ export default function CoWriterApp() {
         route={route} setRoute={setRoute}
         onLevelClick={() => setRoute('onboarding')}
         onNewChapter={handleNewChapter}
+        userName={user?.name}
+        userEmail={user?.guest ? (lang === 'kr' ? '게스트 모드' : 'Guest mode') : user?.email}
+        onSettings={() => setShowSettings(v => !v)}
       />
 
       <main className="main">

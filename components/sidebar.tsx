@@ -13,9 +13,12 @@ interface SidebarProps {
   setRoute: (r: Route) => void;
   onLevelClick: () => void;
   onNewChapter?: () => void;
+  userName?: string;
+  userEmail?: string;
+  onSettings?: () => void;
 }
 
-export function Sidebar({ t, lang, level, chapters, currentChapter, setCurrentChapter, route, setRoute, onLevelClick, onNewChapter }: SidebarProps) {
+export function Sidebar({ t, lang, level, chapters, currentChapter, setCurrentChapter, route, setRoute, onLevelClick, onNewChapter, userName, userEmail, onSettings }: SidebarProps) {
   const levelLabels: Record<Level, string> = {
     beginner: t.lvl_beginner_name,
     growing:  t.lvl_growing_name,
@@ -59,12 +62,14 @@ export function Sidebar({ t, lang, level, chapters, currentChapter, setCurrentCh
           </button>
         )}
         {level !== 'beginner' && (
-          <button className="nav-item">
+          <button className="nav-item" data-active={route === 'analysis' ? '1' : '0'}
+                  onClick={() => setRoute('analysis')}>
             <span className="nav-icon">⌖</span>
             <span>{lang === 'kr' ? '분석' : 'Analysis'}</span>
           </button>
         )}
-        <button className="nav-item">
+        <button className="nav-item" disabled style={{ opacity: 0.4, cursor: 'default' }}
+                title={lang === 'kr' ? '준비 중이에요' : 'Coming soon'}>
           <span className="nav-icon">▤</span>
           <span>{t.nav_archive}</span>
         </button>
@@ -94,12 +99,17 @@ export function Sidebar({ t, lang, level, chapters, currentChapter, setCurrentCh
       </div>
 
       <div className="sidebar-foot">
-        <div className="avatar">{lang === 'kr' ? '나' : 'Me'}</div>
-        <div className="who" style={{ flex: 1 }}>
-          <b>{lang === 'kr' ? '나의 작업실' : 'My writing room'}</b>
-          <small>{lang === 'kr' ? '저장 동기화됨' : 'Synced'}</small>
+        <div className="avatar">{(userName || (lang === 'kr' ? '나' : 'Me')).slice(0, 2)}</div>
+        <div className="who" style={{ flex: 1, minWidth: 0 }}>
+          <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+            {userName || (lang === 'kr' ? '나의 작업실' : 'My writing room')}
+          </b>
+          <small style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+            {userEmail || (lang === 'kr' ? '저장 동기화됨' : 'Synced')}
+          </small>
         </div>
-        <button className="icon-btn" style={{ width: 28, height: 28 }} aria-label="settings">⚙</button>
+        <button className="icon-btn" style={{ width: 28, height: 28 }} aria-label="settings"
+                onClick={onSettings}>⚙</button>
       </div>
     </aside>
   );
@@ -198,7 +208,10 @@ export function DashboardScreen({ t, lang, level, chapters, setCurrentChapter, s
 
         <h2 className="dash-h2">
           {t.dash_recent}
-          <button className="h2-action">{lang === 'kr' ? '모두 보기' : 'See all'} →</button>
+          <button className="h2-action"
+                  onClick={() => { if (chapters[0]) { setCurrentChapter(chapters[0].id); setRoute('editor'); } }}>
+            {lang === 'kr' ? '모두 보기' : 'See all'} →
+          </button>
         </h2>
         <div className="chap-grid">
           {chapters.filter(c => c.status !== 'new').map((c) => (
