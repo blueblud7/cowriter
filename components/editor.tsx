@@ -1,0 +1,341 @@
+'use client';
+import { useState, useEffect, useRef } from 'react';
+import { InkiMascot } from './mascot';
+import type { Level, Lang, Chapter, Style, Starter, Sample, T } from '@/lib/data';
+
+interface EditorScreenProps {
+  t: T;
+  lang: Lang;
+  level: Level;
+  chapter: Chapter;
+  sample: Sample;
+  styles: Style[];
+  starters: Starter[];
+  onTransform: () => void;
+  onFocus: () => void;
+  onAnalyze: () => void;
+  onStyleClick: (id: string) => void;
+}
+
+export function EditorScreen({ t, lang, level, chapter, sample, styles, starters, onTransform, onFocus, onAnalyze, onStyleClick }: EditorScreenProps) {
+  const [title, setTitle] = useState(chapter.title);
+  const [body, setBody] = useState(sample.raw);
+  const [styleQuery, setStyleQuery] = useState('');
+
+  useEffect(() => {
+    setTitle(chapter.title);
+    setBody(sample.raw);
+  }, [chapter.id, sample.raw]);
+
+  const wordCount = body.trim() ? body.trim().split(/\s+/).length : 0;
+  const charCount = body.length;
+  const visibleStyles = level === 'beginner'
+    ? styles.filter(s => ['literary', 'minimalist', 'conversational'].includes(s.id))
+    : styles;
+  const filteredStyles = styleQuery
+    ? visibleStyles.filter(s => s[lang].name.toLowerCase().includes(styleQuery.toLowerCase()))
+    : visibleStyles;
+
+  return (
+    <>
+      <div className="topbar">
+        <div className="crumb">
+          <span>{t.nav_drafts}</span>
+          <span>›</span>
+          <b>{lang === 'kr' ? `챕터 ${chapter.n}` : `Chapter ${chapter.n}`}</b>
+        </div>
+        <div className="spacer" />
+        <span className="save-pill">{t.ed_save}</span>
+        <button className="icon-btn" onClick={onAnalyze} title={t.ed_analysis} aria-label="analysis">⌖</button>
+        <button className="icon-btn" onClick={onFocus} title={t.ed_focus} aria-label="focus">◐</button>
+        <button className="btn btn-primary" onClick={onTransform}>
+          <span style={{ fontSize: 14, lineHeight: 1 }}>✦</span>
+          {t.ed_transform}
+        </button>
+      </div>
+
+      <div className={`editor-shell editor-shell-${level}`}>
+        <div className="manuscript">
+          <input className="manuscript-title" value={title}
+                 onChange={(e) => setTitle(e.target.value)}
+                 placeholder={lang === 'kr' ? '제목 없음' : 'Untitled'} />
+          <div className="manuscript-meta">
+            <span>CHAPTER {String(chapter.n).padStart(2, '0')}</span>
+            <span>·</span>
+            <span>{wordCount.toLocaleString()} {t.ed_words}</span>
+            <span>·</span>
+            <span>{charCount.toLocaleString()} {t.ed_chars}</span>
+          </div>
+          <textarea
+            className="manuscript-body"
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder={lang === 'kr' ? '한 문장으로 시작해 보세요...' : 'Start with a single sentence...'}
+            spellCheck={false}
+          />
+
+          {level === 'beginner' && (
+            <div className="ed-starters">
+              <div className="ed-starters-head">
+                <InkiMascot size={32} mood="encouraging" />
+                <div>
+                  <div className="ed-starters-title">{t.ed_starters_title}</div>
+                  <div className="ed-starters-sub">{t.ed_starters_sub}</div>
+                </div>
+              </div>
+              <div className="ed-starters-grid">
+                {starters.slice(0, 4).map((s, i) => (
+                  <button key={i} className="starter-card"
+                          onClick={() => setBody(body + (body ? '\n\n' : '') + s.body)}>
+                    <span className="starter-tag">{s.tag}</span>
+                    <span className="starter-title">{s.title}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {level !== 'beginner' && (
+          <aside className="ed-rail">
+            <div className="rail-section">
+              <div className="rail-h">
+                <span>{lang === 'kr' ? '스타일' : 'Styles'}</span>
+                {level === 'pro' && (
+                  <input className="rail-search" placeholder={lang === 'kr' ? '검색' : 'Search'}
+                         value={styleQuery} onChange={(e) => setStyleQuery(e.target.value)} />
+                )}
+              </div>
+              <div className="rail-styles">
+                {filteredStyles.slice(0, level === 'pro' ? 10 : 6).map((s) => (
+                  <button key={s.id} className="rail-style"
+                          onClick={() => onStyleClick(s.id)}>
+                    <span className="rail-style-icon" style={{ background: s.swatch + '22', color: s.swatch }}>
+                      {s.icon}
+                    </span>
+                    <div className="rail-style-meta">
+                      <div className="rail-style-name">{s[lang].name}</div>
+                      <div className="rail-style-hint">{s[lang].hint}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="rail-section">
+              <div className="rail-h"><span>{lang === 'kr' ? '빠른 조정' : 'Quick controls'}</span></div>
+              <div className="rail-control">
+                <div className="rail-control-label">{t.sp_tone}</div>
+                <div className="rail-seg">
+                  <button data-on="0">{t.sp_tone_warm}</button>
+                  <button data-on="1">{t.sp_tone_neutral}</button>
+                  <button data-on="0">{t.sp_tone_cool}</button>
+                </div>
+              </div>
+              <div className="rail-control">
+                <div className="rail-control-label">{t.sp_length}</div>
+                <div className="rail-seg">
+                  <button data-on="0">{t.sp_len_short}</button>
+                  <button data-on="1">{t.sp_len_keep}</button>
+                  <button data-on="0">{t.sp_len_long}</button>
+                </div>
+              </div>
+            </div>
+
+            {level === 'pro' && (
+              <div className="rail-section">
+                <div className="rail-h"><span>{lang === 'kr' ? '문서' : 'Document'}</span></div>
+                <div className="rail-stats">
+                  <div className="rail-stat">
+                    <span className="rail-stat-label">{lang === 'kr' ? '평균 문장 길이' : 'Avg sentence'}</span>
+                    <span className="rail-stat-val">14.2</span>
+                  </div>
+                  <div className="rail-stat">
+                    <span className="rail-stat-label">{lang === 'kr' ? '읽기 시간' : 'Read time'}</span>
+                    <span className="rail-stat-val">2:14</span>
+                  </div>
+                  <div className="rail-stat">
+                    <span className="rail-stat-label">{lang === 'kr' ? '난이도' : 'Reading level'}</span>
+                    <span className="rail-stat-val">{lang === 'kr' ? '중2' : 'Grade 8'}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </aside>
+        )}
+      </div>
+    </>
+  );
+}
+
+interface StylePickerProps {
+  t: T;
+  lang: Lang;
+  styles: Style[];
+  sample: Sample;
+  level: Level;
+  onClose: () => void;
+  onApply: (id: string) => void;
+}
+
+export function StylePicker({ t, lang, styles, sample, level, onClose, onApply }: StylePickerProps) {
+  const visible = level === 'beginner'
+    ? styles.filter(s => ['literary', 'minimalist', 'conversational'].includes(s.id))
+    : styles;
+  const [idx, setIdx] = useState(0);
+  const [tone, setTone] = useState('neutral');
+  const [length, setLength] = useState('keep');
+  const [dragX, setDragX] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const deckRef = useRef<HTMLDivElement>(null);
+
+  const cur = visible[idx];
+  const STRIDE = 180;
+
+  const startDrag = (e: React.PointerEvent) => {
+    setDragging(true);
+    const startX = e.clientX;
+    const move = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX;
+      const atLeft = idx === 0 && dx > 0;
+      const atRight = idx === visible.length - 1 && dx < 0;
+      setDragX((atLeft || atRight) ? dx * 0.3 : dx);
+    };
+    const up = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX;
+      setDragging(false);
+      if (Math.abs(dx) > STRIDE * 0.4) {
+        const dir = dx > 0 ? -1 : 1;
+        setIdx((i) => Math.max(0, Math.min(visible.length - 1, i + dir)));
+      }
+      setDragX(0);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  const previewFor = (styleId: string) => {
+    if (styleId === 'literary' && sample.literary) return sample.literary;
+    if (styleId === 'minimalist' && sample.minimalist) return sample.minimalist;
+    return sample.literary
+      ? sample.literary.split('. ').slice(0, 3).join('. ') + '.'
+      : sample.raw;
+  };
+
+  const step = (delta: number) => {
+    setIdx((i) => (i + delta + visible.length) % visible.length);
+  };
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') step(-1);
+      else if (e.key === 'ArrowRight') step(1);
+      else if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [visible.length]);
+
+  return (
+    <div className="sp-overlay" onClick={onClose}>
+      <div className="sp-panel fade-in" onClick={(e) => e.stopPropagation()}>
+        <div className="sp-head">
+          <div>
+            <h2 className="sp-title">{t.sp_title}</h2>
+            <div className="sp-sub">{t.sp_sub}</div>
+          </div>
+          <button className="icon-btn" onClick={onClose} aria-label="close">✕</button>
+        </div>
+
+        <div className="sp-deck">
+          <button className="sp-nav sp-nav-l" onClick={() => step(-1)} aria-label="prev">‹</button>
+          <div ref={deckRef}
+               className={dragging ? 'sp-deck-track sp-deck-dragging' : 'sp-deck-track'}
+               onPointerDown={startDrag}>
+            {visible.map((s, i) => {
+              const off = i - idx;
+              const abs = Math.abs(off);
+              if (abs > 2) return null;
+              const dragOffPct = (dragX / 320) * 56;
+              const baseOff = off * 56;
+              const finalOff = baseOff + dragOffPct;
+              const dragAbs = Math.abs(off - dragX / STRIDE);
+              return (
+                <div key={s.id}
+                     className="sp-card"
+                     data-pos={off}
+                     onClick={() => !dragging && setIdx(i)}
+                     style={{
+                       '--swatch': s.swatch,
+                       transform: `translateX(${finalOff}%) scale(${Math.max(0.7, 1 - dragAbs * 0.08)})`,
+                       opacity: dragAbs > 1.5 ? 0.25 : dragAbs > 0.5 ? Math.max(0.4, 1 - (dragAbs - 0.5) * 0.6) : 1,
+                       zIndex: 10 - Math.round(dragAbs),
+                       transition: dragging ? 'none' : 'transform 0.32s cubic-bezier(.2,.7,.3,1), opacity 0.32s, border-color 0.2s',
+                       pointerEvents: abs <= 1 ? 'auto' : 'none',
+                     } as React.CSSProperties}>
+                  <div className="sp-card-head">
+                    <span className="sp-card-icon" style={{ background: s.swatch + '22', color: s.swatch }}>
+                      {s.icon}
+                    </span>
+                    <div>
+                      <div className="sp-card-name">{s[lang].name}</div>
+                      <div className="sp-card-hint">{s[lang].hint}</div>
+                    </div>
+                  </div>
+                  <div className="sp-card-preview">
+                    {previewFor(s.id)}
+                  </div>
+                  <div className="sp-card-badge">{t.sp_preview}</div>
+                </div>
+              );
+            })}
+          </div>
+          <button className="sp-nav sp-nav-r" onClick={() => step(1)} aria-label="next">›</button>
+        </div>
+
+        <div className="sp-dots">
+          {visible.map((s, i) => (
+            <button key={s.id} className="sp-dot" data-on={i === idx ? '1' : '0'}
+                    onClick={() => setIdx(i)} aria-label={s[lang].name} />
+          ))}
+        </div>
+
+        <div className="sp-controls">
+          <div className="sp-ctrl">
+            <div className="sp-ctrl-label">{t.sp_tone}</div>
+            <div className="rail-seg">
+              {([['warm', t.sp_tone_warm], ['neutral', t.sp_tone_neutral], ['cool', t.sp_tone_cool]] as [string, string][]).map(([v, l]) => (
+                <button key={v} data-on={tone === v ? '1' : '0'} onClick={() => setTone(v)}>{l}</button>
+              ))}
+            </div>
+          </div>
+          <div className="sp-ctrl">
+            <div className="sp-ctrl-label">{t.sp_length}</div>
+            <div className="rail-seg">
+              {([['short', t.sp_len_short], ['keep', t.sp_len_keep], ['long', t.sp_len_long]] as [string, string][]).map(([v, l]) => (
+                <button key={v} data-on={length === v ? '1' : '0'} onClick={() => setLength(v)}>{l}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="sp-foot">
+          <div className="sp-foot-tip">
+            <InkiMascot size={28} mood="wink" />
+            <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+              {lang === 'kr'
+                ? `${cur[lang].name} 스타일로 다듬으면 호흡이 ${tone === 'warm' ? '따뜻해져요' : tone === 'cool' ? '서늘해져요' : '균형 잡혀요'}.`
+                : `${cur[lang].name} will make the prose ${tone === 'warm' ? 'warmer' : tone === 'cool' ? 'cooler' : 'more balanced'}.`}
+            </span>
+          </div>
+          <button className="btn btn-primary" style={{ padding: '10px 18px' }}
+                  onClick={() => onApply(cur.id)}>
+            {t.sp_apply} →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
