@@ -45,7 +45,7 @@ Text to analyze:
 ${text.slice(0, 4000)}`;
 
     const response = await getClient().chat.completions.create({
-      model: 'gpt-5-nano',
+      model: 'gpt-5.4-nano',
       max_tokens: 1000,
       messages: [{ role: 'user', content: prompt }],
     });
