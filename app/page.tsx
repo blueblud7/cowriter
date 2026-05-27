@@ -247,6 +247,7 @@ export default function CoWriterApp() {
             }}
             onSave={handleSaveBody}
             onBodyChange={(body) => { liveBodyRef.current = body; }}
+            chapterId={currentChapterId ?? undefined}
             tone={selectedTone} length={selectedLength}
             onToneChange={setSelectedTone} onLengthChange={setSelectedLength}
           />

@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { InkiMascot } from './mascot';
 import type { Lang, T } from '@/lib/data';
 import { GENRES, THEMES, PREMISE } from '@/lib/data';
@@ -97,6 +97,15 @@ export function StoryBibleScreen({ t, lang, onClose, onJumpToChapter }: StoryBib
   /* timeline */
   const [beats, setBeats] = useState<Beat[]>([]);
   const addBeat  = () => setBeats(p => [...p, emptyBeat()]);
+
+  // Persist Bible data for AI consistency checks
+  useEffect(() => {
+    try {
+      localStorage.setItem('cowriter-bible', JSON.stringify({
+        characters: chars, rules, backstory, places, objects, beats, premise,
+      }));
+    } catch {}
+  }, [chars, rules, backstory, places, objects, beats, premise]);
   const patchBeat = (id: string, patch: Partial<Beat>) =>
     setBeats(p => p.map(b => b.id === id ? { ...b, ...patch } : b));
   const delBeat  = (id: string) => setBeats(p => p.filter(b => b.id !== id));

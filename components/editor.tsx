@@ -2,6 +2,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { InkiMascot } from './mascot';
 import type { Level, Lang, Chapter, Style, Starter, Sample, T } from '@/lib/data';
+import { getSnapshots, saveSnapshot, deleteSnapshot, type Snapshot } from '@/lib/snapshots';
+import { getDrafts, createDraft, deleteDraft, type Draft } from '@/lib/drafts';
+
+interface CheckIssue {
+  severity: 'warning' | 'error';
+  field: string;
+  issue: string;
+  suggestion: string;
+}
 
 interface EditorScreenProps {
   t: T;
@@ -17,13 +26,14 @@ interface EditorScreenProps {
   onStyleClick: (id: string) => void;
   onSave?: (body: string) => void;
   onBodyChange?: (body: string) => void;
+  chapterId?: string;
   tone?: string;
   length?: string;
   onToneChange?: (v: string) => void;
   onLengthChange?: (v: string) => void;
 }
 
-export function EditorScreen({ t, lang, level, chapter, sample, styles, starters, onTransform, onFocus, onAnalyze, onStyleClick, onSave, onBodyChange, tone = 'neutral', length = 'keep', onToneChange, onLengthChange }: EditorScreenProps) {
+export function EditorScreen({ t, lang, level, chapter, sample, styles, starters, onTransform, onFocus, onAnalyze, onStyleClick, onSave, onBodyChange, chapterId, tone = 'neutral', length = 'keep', onToneChange, onLengthChange }: EditorScreenProps) {
   const [title, setTitle] = useState(chapter.title);
   const [body, setBody] = useState(sample.raw);
   const [styleQuery, setStyleQuery] = useState('');
@@ -31,6 +41,20 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
   const [suggesting, setSuggesting] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suggestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // AI Consistency Check
+  const [checkIssues, setCheckIssues] = useState<CheckIssue[]>([]);
+  const [checking, setChecking] = useState(false);
+  const [showCheckPanel, setShowCheckPanel] = useState(false);
+
+  // Snapshots
+  const [snaps, setSnaps] = useState<Snapshot[]>([]);
+  const [showSnapPanel, setShowSnapPanel] = useState(false);
+  const prevWordCount = useRef(0);
+
+  // Alternative Drafts
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [showDraftMenu, setShowDraftMenu] = useState(false);
 
   // Canvas pan/zoom
   const stageRef = useRef<HTMLDivElement>(null);
@@ -149,7 +173,14 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
   useEffect(() => {
     setTitle(chapter.title);
     setBody(sample.raw);
-  }, [chapter.id, sample.raw]);
+    if (chapterId) {
+      setSnaps(getSnapshots(chapterId));
+      setDrafts(getDrafts(chapterId));
+    }
+    prevWordCount.current = sample.raw.trim().split(/\s+/).filter(Boolean).length;
+    setCheckIssues([]);
+    setShowCheckPanel(false);
+  }, [chapter.id, sample.raw, chapterId]);
 
   const fetchSuggestion = useCallback(async (text: string) => {
     if (text.trim().length < 15) return;
@@ -178,6 +209,15 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => onSave(val), 1500);
     }
+    // Auto-snapshot every 500 words
+    if (chapterId) {
+      const wc = val.trim().split(/\s+/).filter(Boolean).length;
+      if (wc > 0 && Math.floor(wc / 500) > Math.floor(prevWordCount.current / 500)) {
+        const snap = saveSnapshot(chapterId, val, 'auto');
+        setSnaps(prev => [snap, ...prev]);
+      }
+      prevWordCount.current = wc;
+    }
   };
 
   const acceptSuggestion = () => {
@@ -186,6 +226,45 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
     handleBodyChange(body + sep + suggestion);
     setSuggestion('');
   };
+
+  const runCheck = useCallback(async () => {
+    if (!body.trim()) return;
+    setChecking(true);
+    setShowCheckPanel(true);
+    setShowSnapPanel(false);
+    setShowDraftMenu(false);
+    try {
+      const bibleRaw = localStorage.getItem('cowriter-bible');
+      const bible = bibleRaw ? JSON.parse(bibleRaw) : {};
+      const res = await fetch('/api/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: body, bible, lang }),
+      });
+      const data = await res.json();
+      setCheckIssues(data.issues || []);
+    } catch { setCheckIssues([]); }
+    setChecking(false);
+  }, [body, lang]);
+
+  const takeSnapshot = useCallback(() => {
+    if (!chapterId || !body.trim()) return;
+    const snap = saveSnapshot(chapterId, body, 'manual');
+    setSnaps(prev => [snap, ...prev]);
+    setShowSnapPanel(true);
+    setShowCheckPanel(false);
+    setShowDraftMenu(false);
+  }, [chapterId, body]);
+
+  const forkDraft = useCallback(() => {
+    if (!chapterId || !body.trim()) return;
+    const label = lang === 'kr' ? `대안 초안 ${drafts.length + 1}` : `Alt Draft ${drafts.length + 1}`;
+    const draft = createDraft(chapterId, label, body);
+    setDrafts(prev => [...prev, draft]);
+    setShowDraftMenu(true);
+    setShowCheckPanel(false);
+    setShowSnapPanel(false);
+  }, [chapterId, body, drafts.length, lang]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Tab' && suggestion) {
@@ -215,6 +294,66 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
         </div>
         <div className="spacer" />
         <span className="save-pill">{t.ed_save}</span>
+        {/* AI Check */}
+        <button className="icon-btn" onClick={runCheck}
+          title={lang === 'kr' ? 'AI 일관성 검사' : 'AI consistency check'}
+          aria-label="check"
+          style={{ position: 'relative' }}>
+          ⚡
+          {checkIssues.length > 0 && (
+            <span style={{ position: 'absolute', top: 2, right: 2, minWidth: 14, height: 14, borderRadius: 7, background: checkIssues.some(i => i.severity === 'error') ? '#ef4444' : '#f59e0b', color: '#fff', fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
+              {checkIssues.length}
+            </span>
+          )}
+        </button>
+        {/* Snapshot */}
+        <button className="icon-btn" onClick={takeSnapshot}
+          title={lang === 'kr' ? `스냅샷 저장 (${snaps.length}개)` : `Save snapshot (${snaps.length})`}
+          aria-label="snapshot"
+          style={{ position: 'relative' }}
+          onContextMenu={(e) => { e.preventDefault(); setShowSnapPanel(v => !v); setShowCheckPanel(false); setShowDraftMenu(false); }}>
+          ⏱
+          {snaps.length > 0 && (
+            <span style={{ position: 'absolute', top: 2, right: 2, minWidth: 14, height: 14, borderRadius: 7, background: 'var(--accent)', color: '#fff', fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
+              {snaps.length}
+            </span>
+          )}
+        </button>
+        {/* Alt Drafts */}
+        <div style={{ position: 'relative' }}>
+          <button className="icon-btn" onClick={forkDraft}
+            title={lang === 'kr' ? '대안 초안 저장' : 'Fork as alt draft'}
+            aria-label="fork draft"
+            onContextMenu={(e) => { e.preventDefault(); if (drafts.length > 0) { setShowDraftMenu(v => !v); setShowCheckPanel(false); setShowSnapPanel(false); } }}>
+            ⎇
+            {drafts.length > 0 && (
+              <span style={{ position: 'absolute', top: 2, right: 2, minWidth: 14, height: 14, borderRadius: 7, background: 'var(--accent)', color: '#fff', fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
+                {drafts.length}
+              </span>
+            )}
+          </button>
+          {showDraftMenu && drafts.length > 0 && (
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.12)', zIndex: 300, minWidth: 240, padding: '6px 0' }} onClick={e => e.stopPropagation()}>
+              <div style={{ padding: '6px 12px 4px', fontSize: 11, fontWeight: 600, color: 'var(--ink-4)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                {lang === 'kr' ? '대안 초안' : 'Alternative Drafts'}
+              </div>
+              {drafts.map(d => (
+                <div key={d.id} style={{ display: 'flex', alignItems: 'center', padding: '6px 12px', gap: 8, borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>{d.label}</div>
+                    <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>{d.wordCount.toLocaleString()} {lang === 'kr' ? '단어' : 'words'} · {new Date(d.createdAt).toLocaleDateString()}</div>
+                  </div>
+                  <button onClick={() => { if (confirm(lang === 'kr' ? '현재 내용을 이 초안으로 교체할까요?' : 'Replace current content with this draft?')) { handleBodyChange(d.body); setShowDraftMenu(false); } }}
+                    style={{ padding: '3px 8px', fontSize: 11, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 5, cursor: 'pointer', color: 'var(--ink-2)' }}>
+                    {lang === 'kr' ? '복원' : 'Restore'}
+                  </button>
+                  <button onClick={() => { deleteDraft(chapterId!, d.id); setDrafts(prev => prev.filter(x => x.id !== d.id)); }}
+                    style={{ padding: '3px 6px', fontSize: 11, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--ink-4)' }}>✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         <button className="icon-btn" onClick={onAnalyze} title={t.ed_analysis} aria-label="analysis">⌖</button>
         <button className="icon-btn" onClick={onFocus} title={t.ed_focus} aria-label="focus">◐</button>
         <button className="btn btn-primary" onClick={onTransform}>
@@ -312,6 +451,89 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
               style={{ width: 24, height: 24, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 13, color: 'var(--ink-3)' }}>↺</button>
           </div>
         </div>{/* /manuscript-stage */}
+
+        {/* AI Check panel */}
+        {showCheckPanel && (
+          <div style={{ position: 'fixed', top: 52, right: 0, width: 300, height: 'calc(100vh - 52px)', background: 'var(--surface-1)', borderLeft: '1px solid var(--border)', zIndex: 150, overflowY: 'auto', padding: 16, boxShadow: '-4px 0 24px rgba(0,0,0,0.1)' }}
+               onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>⚡ {lang === 'kr' ? 'AI 일관성 검사' : 'AI Consistency'}</div>
+                <div style={{ fontSize: 11, color: 'var(--ink-4)', marginTop: 2 }}>{lang === 'kr' ? 'Story Bible과 비교' : 'vs. Story Bible'}</div>
+              </div>
+              <button onClick={() => setShowCheckPanel(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--ink-3)' }}>✕</button>
+            </div>
+            {checking ? (
+              <div style={{ color: 'var(--ink-3)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, padding: '20px 0' }}>
+                <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>◐</span>
+                {lang === 'kr' ? '검사 중…' : 'Checking…'}
+              </div>
+            ) : checkIssues.length === 0 ? (
+              <div style={{ color: 'var(--ink-3)', fontSize: 13, padding: '20px 0', textAlign: 'center' }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>✓</div>
+                {lang === 'kr' ? 'Story Bible과 일치합니다.' : 'No inconsistencies found.'}
+                {!localStorage.getItem('cowriter-bible') && (
+                  <div style={{ fontSize: 11, marginTop: 8, color: 'var(--ink-4)' }}>{lang === 'kr' ? 'Story Bible을 먼저 작성하세요.' : 'Set up your Story Bible first.'}</div>
+                )}
+              </div>
+            ) : (
+              checkIssues.map((issue, i) => (
+                <div key={i} style={{ marginBottom: 12, padding: 12, borderRadius: 10, background: issue.severity === 'error' ? 'rgba(239,68,68,0.08)' : 'rgba(245,158,11,0.08)', border: `1px solid ${issue.severity === 'error' ? 'rgba(239,68,68,0.3)' : 'rgba(245,158,11,0.3)'}` }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: issue.severity === 'error' ? '#dc2626' : '#d97706', marginBottom: 4 }}>
+                    {issue.severity === 'error' ? '⚠ 오류' : '△ 주의'} · {issue.field}
+                  </div>
+                  <div style={{ fontSize: 13, lineHeight: 1.5 }}>{issue.issue}</div>
+                  <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 8, lineHeight: 1.4 }}>💡 {issue.suggestion}</div>
+                </div>
+              ))
+            )}
+            <button onClick={runCheck} style={{ marginTop: 8, width: '100%', padding: '8px 12px', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13, color: 'var(--ink-2)' }}>
+              {lang === 'kr' ? '다시 검사' : 'Re-check'}
+            </button>
+          </div>
+        )}
+
+        {/* Snapshot panel */}
+        {showSnapPanel && (
+          <div style={{ position: 'fixed', bottom: 0, left: 240, right: 0, height: 300, background: 'var(--surface-1)', borderTop: '1px solid var(--border)', zIndex: 150, overflowY: 'auto', padding: 16, boxShadow: '0 -4px 24px rgba(0,0,0,0.1)' }}
+               onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>⏱ {lang === 'kr' ? '버전 이력' : 'Version History'}</div>
+                <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>{lang === 'kr' ? '우클릭→목록 열기 / 클릭→새 스냅샷' : 'Right-click=list / Click=new snapshot'}</div>
+              </div>
+              <button onClick={() => setShowSnapPanel(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--ink-3)' }}>✕</button>
+            </div>
+            {snaps.length === 0 ? (
+              <div style={{ color: 'var(--ink-3)', fontSize: 13 }}>{lang === 'kr' ? '아직 스냅샷이 없습니다.' : 'No snapshots yet.'}</div>
+            ) : (
+              <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 8 }}>
+                {snaps.map(s => (
+                  <div key={s.id} style={{ minWidth: 180, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, flexShrink: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 999, background: s.label === 'auto' ? 'rgba(99,102,241,0.15)' : 'rgba(34,197,94,0.15)', color: s.label === 'auto' ? '#6366f1' : '#16a34a' }}>
+                        {s.label === 'auto' ? (lang === 'kr' ? '자동' : 'auto') : (lang === 'kr' ? '수동' : 'manual')}
+                      </span>
+                      <button onClick={() => { deleteSnapshot(chapterId!, s.id); setSnaps(prev => prev.filter(x => x.id !== s.id)); }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--ink-4)', padding: 2 }}>✕</button>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 8 }}>
+                      {new Date(s.createdAt).toLocaleDateString()} {new Date(s.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      <br />{s.wordCount.toLocaleString()} {lang === 'kr' ? '단어' : 'words'}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--ink-3)', fontStyle: 'italic', marginBottom: 8, lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>
+                      {s.body.slice(0, 80)}…
+                    </div>
+                    <button onClick={() => { if (confirm(lang === 'kr' ? '이 버전으로 복원할까요?' : 'Restore this version?')) { handleBodyChange(s.body); setShowSnapPanel(false); } }}
+                      style={{ width: '100%', padding: '5px 0', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                      {lang === 'kr' ? '이 버전으로 복원' : 'Restore'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {level !== 'beginner' && (
           <aside className="ed-rail">
