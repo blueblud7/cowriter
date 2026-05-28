@@ -7,6 +7,7 @@ import { getSnapshots, saveSnapshot, deleteSnapshot, type Snapshot } from '@/lib
 import { getDrafts, createDraft, deleteDraft, type Draft } from '@/lib/drafts';
 import { getTriggeredLore, countTriggeredLore } from '@/lib/lore-injection';
 import { addWordsToday, getTodayWords, getTodayProgress, getDailyGoal, getStreak } from '@/lib/goals';
+import { getSummary, setSummary } from '@/lib/summaries';
 
 interface CheckIssue {
   severity: 'warning' | 'error';
@@ -121,6 +122,16 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
 
   // Writing goals
   const prevBodyWordCount = useRef(0);
+
+  // Proofread
+  interface ProofIssue { type: 'cliche' | 'passive' | 'weak' | 'redundant'; text: string; suggestion: string; reason: string; }
+  const [showProofPanel, setShowProofPanel] = useState(false);
+  const [proofIssues, setProofIssues] = useState<ProofIssue[]>([]);
+  const [proofreading, setProofreading] = useState(false);
+
+  // Chapter summary
+  const [chapterSummary, setChapterSummary] = useState('');
+  const [summarizing, setSummarizing] = useState(false);
 
   // Canvas pan/zoom
   const stageRef = useRef<HTMLDivElement>(null);
@@ -253,6 +264,9 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
     prevWordCount.current = sample.raw.trim().split(/\s+/).filter(Boolean).length;
     setCheckIssues([]);
     setShowCheckPanel(false);
+    setProofIssues([]);
+    setShowProofPanel(false);
+    if (chapterId) setChapterSummary(getSummary(chapterId));
   }, [chapter.id, sample.raw, chapterId]);
 
   const fetchSuggestion = useCallback(async (text: string) => {
@@ -477,6 +491,42 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
     window.speechSynthesis.speak(utter);
   }, [reading, selectedText, body, lang]);
 
+  const runProofread = useCallback(async () => {
+    if (!body.trim()) return;
+    setProofreading(true);
+    setShowProofPanel(true);
+    setShowCheckPanel(false);
+    setShowGuidePanel(false);
+    try {
+      const res = await fetch('/api/proofread', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: body, lang }),
+      });
+      const data = await res.json();
+      setProofIssues(data.issues || []);
+    } catch { setProofIssues([]); }
+    setProofreading(false);
+  }, [body, lang]);
+
+  const generateSummary = useCallback(async () => {
+    if (!body.trim() || !chapterId) return;
+    setSummarizing(true);
+    try {
+      const res = await fetch('/api/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: body, lang }),
+      });
+      const data = await res.json();
+      if (data.summary) {
+        setChapterSummary(data.summary);
+        setSummary(chapterId, data.summary);
+      }
+    } catch {}
+    setSummarizing(false);
+  }, [body, lang, chapterId]);
+
   const getMatches = useCallback((query: string): number[] => {
     if (!query) return [];
     const positions: number[] = [];
@@ -687,6 +737,25 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
             </div>
           )}
         </div>
+        {/* Proofread */}
+        <button className="icon-btn" onClick={runProofread}
+          title={lang === 'kr' ? '클리셰 · 수동태 · 약한 표현 감지' : 'Clichés · passive voice · weak words'}
+          aria-label="proofread"
+          style={{ position: 'relative', fontSize: 14 }}>
+          ✏️
+          {proofIssues.length > 0 && (
+            <span style={{ position: 'absolute', top: 2, right: 2, minWidth: 14, height: 14, borderRadius: 7, background: '#f59e0b', color: '#fff', fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
+              {proofIssues.length}
+            </span>
+          )}
+        </button>
+        {/* Chapter summary */}
+        <button className="icon-btn" onClick={generateSummary}
+          title={lang === 'kr' ? '챕터 AI 요약 생성' : 'Generate chapter summary'}
+          aria-label="summarize"
+          style={{ fontSize: 14, color: summarizing ? 'var(--accent)' : chapterSummary ? '#10b981' : undefined }}>
+          {summarizing ? <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>◐</span> : '📋'}
+        </button>
         {/* Shrink */}
         <button className="icon-btn" onClick={openShrink}
           title={lang === 'kr' ? '글 압축 요약' : 'Shrink / compress'}
@@ -781,6 +850,14 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
             <span>·</span>
             <span>{charCount.toLocaleString()} {t.ed_chars}</span>
           </div>
+          {chapterSummary && (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, margin: '0 0 10px', padding: '8px 12px', background: 'rgba(16,185,129,0.07)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 8 }}>
+              <span style={{ fontSize: 13, flexShrink: 0 }}>📋</span>
+              <span style={{ fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.6, flex: 1 }}>{chapterSummary}</span>
+              <button onClick={() => { setChapterSummary(''); if (chapterId) setSummary(chapterId, ''); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--ink-4)', padding: 0, flexShrink: 0 }}>✕</button>
+            </div>
+          )}
           <textarea
             ref={textareaRef}
             className="manuscript-body"
@@ -1037,6 +1114,78 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
                 {lang === 'kr' ? '다시 분석' : 'Re-analyze'}
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Proofread panel */}
+        {showProofPanel && (
+          <div style={{ position: 'fixed', top: 52, right: 0, width: 300, height: 'calc(100vh - 52px)', background: 'var(--surface-1)', borderLeft: '1px solid var(--border)', zIndex: 150, overflowY: 'auto', padding: 16, boxShadow: '-4px 0 24px rgba(0,0,0,0.1)' }}
+               onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>✏️ {lang === 'kr' ? '문체 교정' : 'Proofread'}</div>
+                <div style={{ fontSize: 11, color: 'var(--ink-4)', marginTop: 2 }}>
+                  {lang === 'kr' ? '클리셰 · 수동태 · 약한 표현' : 'Clichés · passive · weak words'}
+                </div>
+              </div>
+              <button onClick={() => setShowProofPanel(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--ink-3)' }}>✕</button>
+            </div>
+
+            {proofreading ? (
+              <div style={{ color: 'var(--ink-3)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, padding: '20px 0' }}>
+                <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>◐</span>
+                {lang === 'kr' ? '분석 중…' : 'Analyzing…'}
+              </div>
+            ) : proofIssues.length === 0 ? (
+              <div style={{ color: 'var(--ink-3)', fontSize: 13, padding: '20px 0', textAlign: 'center' }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>✓</div>
+                {lang === 'kr' ? '문제가 없습니다!' : 'No issues found!'}
+              </div>
+            ) : (
+              <>
+                {(['cliche', 'passive', 'weak', 'redundant'] as const).map(type => {
+                  const items = proofIssues.filter(i => i.type === type);
+                  if (!items.length) return null;
+                  const typeInfo: Record<string, { label: string; color: string; icon: string }> = {
+                    cliche:    { label: lang === 'kr' ? '진부한 표현' : 'Cliché',       color: '#f59e0b', icon: '⚠' },
+                    passive:   { label: lang === 'kr' ? '수동태'     : 'Passive voice', color: '#6366f1', icon: '○' },
+                    weak:      { label: lang === 'kr' ? '약한 단어'  : 'Weak words',   color: '#94a3b8', icon: '▽' },
+                    redundant: { label: lang === 'kr' ? '중복 표현'  : 'Redundant',    color: '#ec4899', icon: '⊘' },
+                  };
+                  const { label, color, icon } = typeInfo[type];
+                  return (
+                    <div key={type} style={{ marginBottom: 16 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+                        {icon} {label} ({items.length})
+                      </div>
+                      {items.map((issue, i) => (
+                        <div key={i} style={{ marginBottom: 8, padding: '9px 11px', borderRadius: 9, background: 'var(--surface-2)', border: `1px solid ${color}33`, cursor: 'pointer' }}
+                             onClick={() => {
+                               const pos = body.toLowerCase().indexOf(issue.text.toLowerCase());
+                               if (pos !== -1 && textareaRef.current) {
+                                 textareaRef.current.focus();
+                                 textareaRef.current.setSelectionRange(pos, pos + issue.text.length);
+                               }
+                             }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color, marginBottom: 3 }}>"{issue.text}"</div>
+                          {issue.suggestion && (
+                            <div style={{ fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.4 }}>
+                              → {issue.suggestion}
+                            </div>
+                          )}
+                          {issue.reason && (
+                            <div style={{ fontSize: 11, color: 'var(--ink-4)', marginTop: 4, lineHeight: 1.4 }}>{issue.reason}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </>
+            )}
+            <button onClick={runProofread} style={{ marginTop: 4, width: '100%', padding: '8px 12px', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13, color: 'var(--ink-2)' }}>
+              {lang === 'kr' ? '다시 검사' : 'Re-check'}
+            </button>
           </div>
         )}
 
