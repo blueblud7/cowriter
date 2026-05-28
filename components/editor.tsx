@@ -12,6 +12,12 @@ interface CheckIssue {
   suggestion: string;
 }
 
+interface GuideData {
+  contradictions: Array<{ severity: string; issue: string; suggestion: string }>;
+  analysis: { summary: string; momentum: string; gaps: string[] } | null;
+  suggestions: Array<{ type: string; label: string; text: string; starter?: string }>;
+}
+
 interface EditorScreenProps {
   t: T;
   lang: Lang;
@@ -27,13 +33,14 @@ interface EditorScreenProps {
   onSave?: (body: string) => void;
   onBodyChange?: (body: string) => void;
   chapterId?: string;
+  allChapterBodies?: string[];
   tone?: string;
   length?: string;
   onToneChange?: (v: string) => void;
   onLengthChange?: (v: string) => void;
 }
 
-export function EditorScreen({ t, lang, level, chapter, sample, styles, starters, onTransform, onFocus, onAnalyze, onStyleClick, onSave, onBodyChange, chapterId, tone = 'neutral', length = 'keep', onToneChange, onLengthChange }: EditorScreenProps) {
+export function EditorScreen({ t, lang, level, chapter, sample, styles, starters, onTransform, onFocus, onAnalyze, onStyleClick, onSave, onBodyChange, chapterId, allChapterBodies, tone = 'neutral', length = 'keep', onToneChange, onLengthChange }: EditorScreenProps) {
   const [title, setTitle] = useState(chapter.title);
   const [body, setBody] = useState(sample.raw);
   const [styleQuery, setStyleQuery] = useState('');
@@ -55,6 +62,17 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
   // Alternative Drafts
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [showDraftMenu, setShowDraftMenu] = useState(false);
+
+  // Guide panel
+  const [showGuidePanel, setShowGuidePanel] = useState(false);
+  const [guideTab, setGuideTab] = useState<'analysis' | 'contradictions' | 'suggestions'>('analysis');
+  const [guideData, setGuideData] = useState<GuideData | null>(null);
+  const [guiding, setGuiding] = useState(false);
+
+  // Auto-write
+  const [autoWriting, setAutoWriting] = useState(false);
+  const autoWriteAbort = useRef<AbortController | null>(null);
+  const isAutoWritingRef = useRef(false);
 
   // Canvas pan/zoom
   const stageRef = useRef<HTMLDivElement>(null);
@@ -130,6 +148,7 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
         const s = Math.max(0.25, tfRef.current.scale - 0.1);
         tfRef.current.scale = s; applyTf();
       }
+      if (e.key === 'Escape' && isAutoWritingRef.current) { stopAutoWrite(); }
     };
     const onUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
@@ -200,10 +219,12 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
   const handleBodyChange = (val: string) => {
     setBody(val);
     onBodyChange?.(val);
-    setSuggestion('');
-    if (suggestTimer.current) clearTimeout(suggestTimer.current);
-    if (val.trim().length >= 15) {
-      suggestTimer.current = setTimeout(() => fetchSuggestion(val), 1200);
+    if (!isAutoWritingRef.current) {
+      setSuggestion('');
+      if (suggestTimer.current) clearTimeout(suggestTimer.current);
+      if (val.trim().length >= 15) {
+        suggestTimer.current = setTimeout(() => fetchSuggestion(val), 1200);
+      }
     }
     if (onSave) {
       if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -266,6 +287,76 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
     setShowSnapPanel(false);
   }, [chapterId, body, drafts.length, lang]);
 
+  const openGuide = useCallback(async () => {
+    if (!body.trim()) return;
+    setGuiding(true);
+    setShowGuidePanel(true);
+    setShowCheckPanel(false);
+    setShowSnapPanel(false);
+    setShowDraftMenu(false);
+    setGuideTab('analysis');
+    try {
+      const bibleRaw = typeof window !== 'undefined' ? localStorage.getItem('cowriter-bible') : null;
+      const bible = bibleRaw ? JSON.parse(bibleRaw) : {};
+      const allText = allChapterBodies?.join('\n\n') || body;
+      const res = await fetch('/api/guide', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: body, allText, bible, lang }),
+      });
+      const data = await res.json();
+      setGuideData(data);
+    } catch { setGuideData(null); }
+    setGuiding(false);
+  }, [body, lang, allChapterBodies]);
+
+  const startAutoWrite = useCallback(async () => {
+    if (!body.trim() || autoWriting) return;
+    const controller = new AbortController();
+    autoWriteAbort.current = controller;
+    setAutoWriting(true);
+    isAutoWritingRef.current = true;
+    setSuggestion('');
+    try {
+      const bibleRaw = typeof window !== 'undefined' ? localStorage.getItem('cowriter-bible') : null;
+      const bible = bibleRaw ? JSON.parse(bibleRaw) : {};
+      const allText = allChapterBodies?.join('\n\n') || body;
+      const res = await fetch('/api/autowrite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: body, allText, bible, lang }),
+        signal: controller.signal,
+      });
+      const reader = res.body?.getReader();
+      if (!reader) return;
+      const decoder = new TextDecoder();
+      let current = body;
+      let first = true;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done || controller.signal.aborted) break;
+        const chunk = decoder.decode(value, { stream: true });
+        if (chunk) {
+          if (first) { current += current.endsWith('\n') ? '\n' : '\n\n'; first = false; }
+          current += chunk;
+          setBody(current);
+          onBodyChange?.(current);
+        }
+      }
+      if (onSave) onSave(current);
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name !== 'AbortError') console.error('Autowrite error:', err);
+    } finally {
+      setAutoWriting(false);
+      isAutoWritingRef.current = false;
+      autoWriteAbort.current = null;
+    }
+  }, [body, lang, allChapterBodies, autoWriting, onBodyChange, onSave]);
+
+  const stopAutoWrite = useCallback(() => {
+    autoWriteAbort.current?.abort();
+  }, []);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Tab' && suggestion) {
       e.preventDefault();
@@ -294,6 +385,31 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
         </div>
         <div className="spacer" />
         <span className="save-pill">{t.ed_save}</span>
+        {/* Auto-write */}
+        {autoWriting ? (
+          <button onClick={stopAutoWrite}
+            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', fontSize: 12, fontWeight: 600, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff', animation: 'pulse 1s ease-in-out infinite', display: 'inline-block' }} />
+            {lang === 'kr' ? '⏹ 중단 (Esc)' : '⏹ Stop (Esc)'}
+          </button>
+        ) : (
+          <button className="icon-btn" onClick={startAutoWrite}
+            title={lang === 'kr' ? 'AI 자동 작성' : 'AI auto-write'}
+            aria-label="auto-write"
+            style={{ fontSize: 15 }}>✍</button>
+        )}
+        {/* Guide */}
+        <button className="icon-btn" onClick={openGuide}
+          title={lang === 'kr' ? '서사 가이드 · 개연성 분석' : 'Narrative guide · Story analysis'}
+          aria-label="guide"
+          style={{ position: 'relative', fontSize: 15 }}>
+          🧭
+          {guideData && (guideData.contradictions.length > 0) && (
+            <span style={{ position: 'absolute', top: 2, right: 2, minWidth: 14, height: 14, borderRadius: 7, background: '#ef4444', color: '#fff', fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
+              {guideData.contradictions.length}
+            </span>
+          )}
+        </button>
         {/* AI Check */}
         <button className="icon-btn" onClick={runCheck}
           title={lang === 'kr' ? 'AI 일관성 검사' : 'AI consistency check'}
@@ -490,6 +606,132 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
             <button onClick={runCheck} style={{ marginTop: 8, width: '100%', padding: '8px 12px', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13, color: 'var(--ink-2)' }}>
               {lang === 'kr' ? '다시 검사' : 'Re-check'}
             </button>
+          </div>
+        )}
+
+        {/* Guide panel */}
+        {showGuidePanel && (
+          <div style={{ position: 'fixed', top: 52, right: 0, width: 320, height: 'calc(100vh - 52px)', background: 'var(--surface-1)', borderLeft: '1px solid var(--border)', zIndex: 150, overflowY: 'auto', display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 24px rgba(0,0,0,0.1)' }}
+               onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>🧭 {lang === 'kr' ? '서사 가이드' : 'Narrative Guide'}</div>
+                <button onClick={() => setShowGuidePanel(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--ink-3)' }}>✕</button>
+              </div>
+              {/* Tabs */}
+              <div style={{ display: 'flex', gap: 4, marginTop: 10 }}>
+                {([['analysis', lang === 'kr' ? '분석' : 'Analysis', '📍'],
+                   ['contradictions', lang === 'kr' ? '모순' : 'Issues', '⚠'],
+                   ['suggestions', lang === 'kr' ? '제안' : 'Ideas', '💡']] as [typeof guideTab, string, string][]).map(([id, label, icon]) => (
+                  <button key={id} onClick={() => setGuideTab(id)}
+                    style={{ flex: 1, padding: '5px 4px', fontSize: 11, fontWeight: guideTab === id ? 700 : 400, background: guideTab === id ? 'var(--accent)' : 'var(--surface-2)', color: guideTab === id ? '#fff' : 'var(--ink-3)', border: 'none', borderRadius: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
+                    {icon} {label}
+                    {id === 'contradictions' && guideData && guideData.contradictions.length > 0 && (
+                      <span style={{ background: guideTab === id ? 'rgba(255,255,255,0.3)' : '#ef4444', color: '#fff', borderRadius: 999, padding: '0 4px', fontSize: 9, fontWeight: 700 }}>{guideData.contradictions.length}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Content */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+              {guiding ? (
+                <div style={{ color: 'var(--ink-3)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, padding: '24px 0' }}>
+                  <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>◐</span>
+                  {lang === 'kr' ? '전체 스토리 분석 중…' : 'Analyzing full story…'}
+                </div>
+              ) : !guideData ? (
+                <div style={{ color: 'var(--ink-3)', fontSize: 13, padding: '24px 0', textAlign: 'center' }}>
+                  {lang === 'kr' ? '아직 분석 결과가 없습니다.' : 'No analysis yet.'}
+                </div>
+              ) : (
+                <>
+                  {/* Analysis tab */}
+                  {guideTab === 'analysis' && guideData.analysis && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                      <div style={{ background: 'var(--surface-2)', borderRadius: 10, padding: 12 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{lang === 'kr' ? '지금까지의 이야기' : 'Story so far'}</div>
+                        <div style={{ fontSize: 13, lineHeight: 1.6 }}>{guideData.analysis.summary}</div>
+                      </div>
+                      <div style={{ background: 'var(--surface-2)', borderRadius: 10, padding: 12 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{lang === 'kr' ? '현재 서사 흐름' : 'Current momentum'}</div>
+                        <div style={{ fontSize: 13, lineHeight: 1.6 }}>{guideData.analysis.momentum}</div>
+                      </div>
+                      {guideData.analysis.gaps.length > 0 && (
+                        <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: 10, padding: 12 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#d97706', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{lang === 'kr' ? '발전이 필요한 부분' : 'Needs development'}</div>
+                          {guideData.analysis.gaps.map((gap, i) => (
+                            <div key={i} style={{ fontSize: 13, lineHeight: 1.5, marginBottom: i < guideData.analysis!.gaps.length - 1 ? 8 : 0, display: 'flex', gap: 6 }}>
+                              <span style={{ color: '#d97706', flexShrink: 0 }}>→</span> {gap}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Contradictions tab */}
+                  {guideTab === 'contradictions' && (
+                    guideData.contradictions.length === 0 ? (
+                      <div style={{ color: 'var(--ink-3)', fontSize: 13, padding: '24px 0', textAlign: 'center' }}>
+                        <div style={{ fontSize: 28, marginBottom: 8 }}>✓</div>
+                        {lang === 'kr' ? '모순이나 개연성 문제가 없습니다.' : 'No contradictions or logic issues found.'}
+                      </div>
+                    ) : (
+                      guideData.contradictions.map((c, i) => (
+                        <div key={i} style={{ marginBottom: 12, padding: 12, borderRadius: 10, background: c.severity === 'error' ? 'rgba(239,68,68,0.08)' : 'rgba(245,158,11,0.08)', border: `1px solid ${c.severity === 'error' ? 'rgba(239,68,68,0.25)' : 'rgba(245,158,11,0.25)'}` }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: c.severity === 'error' ? '#dc2626' : '#d97706', marginBottom: 5 }}>
+                            {c.severity === 'error' ? '⚠ 오류' : '△ 주의'}
+                          </div>
+                          <div style={{ fontSize: 13, lineHeight: 1.5 }}>{c.issue}</div>
+                          <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 8, lineHeight: 1.4, borderTop: '1px solid var(--border)', paddingTop: 8 }}>💡 {c.suggestion}</div>
+                        </div>
+                      ))
+                    )
+                  )}
+
+                  {/* Suggestions tab */}
+                  {guideTab === 'suggestions' && (
+                    guideData.suggestions.length === 0 ? (
+                      <div style={{ color: 'var(--ink-3)', fontSize: 13, padding: '24px 0', textAlign: 'center' }}>
+                        {lang === 'kr' ? '제안이 없습니다.' : 'No suggestions.'}
+                      </div>
+                    ) : (
+                      guideData.suggestions.map((s, i) => {
+                        const typeColors: Record<string, string> = { plot: '#6366f1', character: '#ec4899', tension: '#ef4444', world: '#10b981' };
+                        const typeColor = typeColors[s.type] || 'var(--accent)';
+                        return (
+                          <div key={i} style={{ marginBottom: 12, padding: 12, borderRadius: 10, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: typeColor + '22', color: typeColor }}>
+                                {s.type}
+                              </span>
+                              <span style={{ fontSize: 13, fontWeight: 600 }}>{s.label}</span>
+                            </div>
+                            <div style={{ fontSize: 13, lineHeight: 1.6, marginBottom: s.starter ? 10 : 0 }}>{s.text}</div>
+                            {s.starter && (
+                              <button onClick={() => handleBodyChange(body + (body.endsWith('\n') ? '\n' : '\n\n') + s.starter)}
+                                style={{ width: '100%', marginTop: 8, padding: '7px 10px', fontSize: 12, background: typeColor, color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontWeight: 600, textAlign: 'left', lineHeight: 1.4 }}>
+                                ↳ {s.starter}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })
+                    )
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+              <button onClick={openGuide} style={{ width: '100%', padding: '8px 12px', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13, color: 'var(--ink-2)' }}>
+                {lang === 'kr' ? '다시 분석' : 'Re-analyze'}
+              </button>
+            </div>
           </div>
         )}
 
