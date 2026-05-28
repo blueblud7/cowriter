@@ -5,6 +5,7 @@ import type { Level, Lang, Chapter, Style, Starter, Sample, T } from '@/lib/data
 import { WRITING_FORMATS } from '@/lib/data';
 import { getSnapshots, saveSnapshot, deleteSnapshot, type Snapshot } from '@/lib/snapshots';
 import { getDrafts, createDraft, deleteDraft, type Draft } from '@/lib/drafts';
+import { getTriggeredLore, countTriggeredLore } from '@/lib/lore-injection';
 
 interface CheckIssue {
   severity: 'warning' | 'error';
@@ -17,6 +18,22 @@ interface GuideData {
   contradictions: Array<{ severity: string; issue: string; suggestion: string }>;
   analysis: { summary: string; momentum: string; gaps: string[] } | null;
   suggestions: Array<{ type: string; label: string; text: string; starter?: string }>;
+}
+
+interface DescribeVersions {
+  sight?: string;
+  sound?: string;
+  smell?: string;
+  taste?: string;
+  touch?: string;
+  metaphor?: string;
+}
+
+interface ShrinkData {
+  logline?: string;
+  blurb?: string;
+  synopsis?: string;
+  outline?: string;
 }
 
 interface EditorScreenProps {
@@ -77,6 +94,22 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
   const [autoWriting, setAutoWriting] = useState(false);
   const autoWriteAbort = useRef<AbortController | null>(null);
   const isAutoWritingRef = useRef(false);
+
+  // Selection + describe
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [selectedText, setSelectedText] = useState('');
+  const [showDescribePanel, setShowDescribePanel] = useState(false);
+  const [describeData, setDescribeData] = useState<DescribeVersions | null>(null);
+  const [describing, setDescribing] = useState(false);
+  const [describeTab, setDescribeTab] = useState<keyof DescribeVersions>('sight');
+
+  // Shrink
+  const [showShrinkPanel, setShowShrinkPanel] = useState(false);
+  const [shrinkData, setShrinkData] = useState<ShrinkData | null>(null);
+  const [shrinking, setShrinking] = useState(false);
+
+  // TTS
+  const [reading, setReading] = useState(false);
 
   // Canvas pan/zoom
   const stageRef = useRef<HTMLDivElement>(null);
@@ -302,11 +335,12 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
     try {
       const bibleRaw = typeof window !== 'undefined' ? localStorage.getItem('cowriter-bible') : null;
       const bible = bibleRaw ? JSON.parse(bibleRaw) : {};
+      const loreContext = getTriggeredLore(body.slice(-1200), bible);
       const allText = allChapterBodies?.join('\n\n') || body;
       const res = await fetch('/api/guide', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: body, allText, bible, lang, format: writingFormat }),
+        body: JSON.stringify({ text: body, allText, bible, lang, format: writingFormat, loreContext }),
       });
       const data = await res.json();
       setGuideData(data);
@@ -324,11 +358,12 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
     try {
       const bibleRaw = typeof window !== 'undefined' ? localStorage.getItem('cowriter-bible') : null;
       const bible = bibleRaw ? JSON.parse(bibleRaw) : {};
+      const loreContext = getTriggeredLore(body.slice(-1200), bible);
       const allText = allChapterBodies?.join('\n\n') || body;
       const res = await fetch('/api/autowrite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: body, allText, bible, lang, format: writingFormat }),
+        body: JSON.stringify({ text: body, allText, bible, lang, format: writingFormat, loreContext }),
         signal: controller.signal,
       });
       const reader = res.body?.getReader();
@@ -361,6 +396,64 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
     autoWriteAbort.current?.abort();
   }, []);
 
+  const updateSelection = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    const sel = el.value.substring(el.selectionStart, el.selectionEnd);
+    setSelectedText(sel);
+  }, []);
+
+  const openDescribe = useCallback(async (text: string) => {
+    if (!text.trim()) return;
+    setDescribing(true);
+    setShowDescribePanel(true);
+    setShowShrinkPanel(false);
+    try {
+      const res = await fetch('/api/describe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, lang, format: writingFormat }),
+      });
+      const data = await res.json();
+      setDescribeData(data.versions || data);
+      setDescribeTab('sight');
+    } catch { setDescribeData(null); }
+    setDescribing(false);
+  }, [lang, writingFormat]);
+
+  const openShrink = useCallback(async () => {
+    if (!body.trim() || body.trim().length < 30) return;
+    setShrinking(true);
+    setShowShrinkPanel(true);
+    setShowDescribePanel(false);
+    try {
+      const res = await fetch('/api/shrink', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: body, lang }),
+      });
+      const data = await res.json();
+      setShrinkData(data);
+    } catch { setShrinkData(null); }
+    setShrinking(false);
+  }, [body, lang]);
+
+  const toggleReadToMe = useCallback(() => {
+    if (reading) {
+      window.speechSynthesis.cancel();
+      setReading(false);
+      return;
+    }
+    const textToRead = selectedText || body;
+    if (!textToRead.trim()) return;
+    const utter = new SpeechSynthesisUtterance(textToRead);
+    utter.lang = lang === 'kr' ? 'ko-KR' : 'en-US';
+    utter.onend = () => setReading(false);
+    utter.onerror = () => setReading(false);
+    setReading(true);
+    window.speechSynthesis.speak(utter);
+  }, [reading, selectedText, body, lang]);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Tab' && suggestion) {
       e.preventDefault();
@@ -388,6 +481,21 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
           <span style={{ fontSize: 14 }}>{formatData?.icon || '📖'}</span>
           {formatData?.[lang].name || (lang === 'kr' ? '형식 선택' : 'Format')}
         </button>
+        {/* Lore count badge */}
+        {(() => {
+          try {
+            const bibleRaw = typeof window !== 'undefined' ? localStorage.getItem('cowriter-bible') : null;
+            const bible = bibleRaw ? JSON.parse(bibleRaw) : {};
+            const count = countTriggeredLore(body.slice(-1200), bible);
+            if (count === 0) return null;
+            return (
+              <span title={lang === 'kr' ? `${count}개 Lore 자동 주입됨` : `${count} lore entries injected`}
+                style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(16,185,129,0.15)', color: '#059669', border: '1px solid rgba(16,185,129,0.3)', whiteSpace: 'nowrap', cursor: 'default' }}>
+                📌 {count}
+              </span>
+            );
+          } catch { return null; }
+        })()}
         <div className="crumb">
           <span>{t.nav_drafts}</span>
           <span>›</span>
@@ -480,6 +588,18 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
             </div>
           )}
         </div>
+        {/* Shrink */}
+        <button className="icon-btn" onClick={openShrink}
+          title={lang === 'kr' ? '글 압축 요약' : 'Shrink / compress'}
+          aria-label="shrink"
+          style={{ fontSize: 14 }}>✂️</button>
+        {/* TTS */}
+        <button className="icon-btn" onClick={toggleReadToMe}
+          title={lang === 'kr' ? (reading ? '읽기 중단' : '텍스트 읽기') : (reading ? 'Stop reading' : 'Read aloud')}
+          aria-label="read-to-me"
+          style={{ fontSize: 14, color: reading ? '#ef4444' : undefined }}>
+          {reading ? '⏹' : '🔊'}
+        </button>
         <button className="icon-btn" onClick={onAnalyze} title={t.ed_analysis} aria-label="analysis">⌖</button>
         <button className="icon-btn" onClick={onFocus} title={t.ed_focus} aria-label="focus">◐</button>
         <button className="btn btn-primary" onClick={onTransform}>
@@ -508,13 +628,34 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
             <span>{charCount.toLocaleString()} {t.ed_chars}</span>
           </div>
           <textarea
+            ref={textareaRef}
             className="manuscript-body"
             value={body}
             onChange={(e) => handleBodyChange(e.target.value)}
             onKeyDown={handleKeyDown}
+            onMouseUp={updateSelection}
+            onKeyUp={updateSelection}
             placeholder={lang === 'kr' ? '한 문장으로 시작해 보세요...' : 'Start with a single sentence...'}
             spellCheck={false}
           />
+
+          {selectedText && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, padding: '5px 10px', background: 'var(--surface-2)', borderRadius: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11, color: 'var(--ink-4)', marginRight: 2 }}>
+                {selectedText.length}{lang === 'kr' ? '자' : 'ch'}
+              </span>
+              <button onClick={() => openDescribe(selectedText)}
+                style={{ padding: '3px 10px', fontSize: 12, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                🎨 {lang === 'kr' ? '오감 묘사' : '5-Sense'}
+              </button>
+              <button onClick={toggleReadToMe}
+                style={{ padding: '3px 10px', fontSize: 12, background: reading ? '#ef4444' : 'var(--surface-1)', color: reading ? '#fff' : 'var(--ink-2)', border: '1px solid var(--border)', borderRadius: 5, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                {reading ? '⏹' : '🔊'} {lang === 'kr' ? (reading ? '중단' : '읽기') : (reading ? 'Stop' : 'Read')}
+              </button>
+              <button onClick={() => setSelectedText('')}
+                style={{ padding: '3px 6px', fontSize: 12, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--ink-4)', marginLeft: 'auto' }}>✕</button>
+            </div>
+          )}
 
           {(suggestion || suggesting) && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, padding: '8px 12px', background: 'var(--surface-2)', borderRadius: 8, fontSize: 13 }}>
@@ -784,6 +925,111 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Describe panel (5-sense) */}
+        {showDescribePanel && (
+          <div style={{ position: 'fixed', top: 52, right: 0, width: 320, height: 'calc(100vh - 52px)', background: 'var(--surface-1)', borderLeft: '1px solid var(--border)', zIndex: 160, display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 24px rgba(0,0,0,0.1)' }}
+               onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>🎨 {lang === 'kr' ? '오감 묘사 확장기' : '5-Sense Expander'}</div>
+                <button onClick={() => setShowDescribePanel(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--ink-3)' }}>✕</button>
+              </div>
+              <div style={{ display: 'flex', gap: 3, marginTop: 10, flexWrap: 'wrap' }}>
+                {([['sight', '👁', lang === 'kr' ? '시각' : 'Sight'],
+                   ['sound', '👂', lang === 'kr' ? '청각' : 'Sound'],
+                   ['smell', '👃', lang === 'kr' ? '후각' : 'Smell'],
+                   ['taste', '👅', lang === 'kr' ? '미각' : 'Taste'],
+                   ['touch', '✋', lang === 'kr' ? '촉각' : 'Touch'],
+                   ['metaphor', '✨', lang === 'kr' ? '은유' : 'Metaphor']] as [keyof DescribeVersions, string, string][]).map(([id, icon, label]) => (
+                  <button key={id} onClick={() => setDescribeTab(id)}
+                    style={{ padding: '4px 8px', fontSize: 11, fontWeight: describeTab === id ? 700 : 400, background: describeTab === id ? 'var(--accent)' : 'var(--surface-2)', color: describeTab === id ? '#fff' : 'var(--ink-3)', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+                    {icon} {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+              {describing ? (
+                <div style={{ color: 'var(--ink-3)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, padding: '24px 0' }}>
+                  <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>◐</span>
+                  {lang === 'kr' ? '감각 묘사 생성 중…' : 'Generating sensory descriptions…'}
+                </div>
+              ) : !describeData ? (
+                <div style={{ color: 'var(--ink-3)', fontSize: 13, padding: '24px 0', textAlign: 'center' }}>
+                  {lang === 'kr' ? '텍스트를 선택 후 오감 묘사를 클릭하세요.' : 'Select text then click 5-Sense.'}
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: 13, lineHeight: 1.8, color: 'var(--ink-1)', whiteSpace: 'pre-wrap', marginBottom: 16 }}>
+                    {describeData[describeTab] || (lang === 'kr' ? '해당 묘사가 없습니다.' : 'No description available.')}
+                  </div>
+                  {describeData[describeTab] && (
+                    <button onClick={() => {
+                      const text = describeData[describeTab]!;
+                      handleBodyChange(body + (body.endsWith('\n') ? '\n' : '\n\n') + text);
+                      setShowDescribePanel(false);
+                    }}
+                      style={{ width: '100%', padding: '8px 12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                      ↳ {lang === 'kr' ? '글에 삽입' : 'Insert into text'}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            {selectedText && (
+              <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', flexShrink: 0, fontSize: 12, color: 'var(--ink-4)', lineHeight: 1.4 }}>
+                <strong>{lang === 'kr' ? '선택된 텍스트:' : 'Selected:'}</strong> {selectedText.slice(0, 80)}{selectedText.length > 80 ? '…' : ''}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Shrink modal */}
+        {showShrinkPanel && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+               onClick={() => setShowShrinkPanel(false)}>
+            <div style={{ background: 'var(--surface-1)', borderRadius: 16, boxShadow: '0 8px 40px rgba(0,0,0,0.2)', width: '100%', maxWidth: 600, maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+                 onClick={e => e.stopPropagation()}>
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>✂️ {lang === 'kr' ? '글 압축 요약' : 'Shrink / Compress'}</div>
+                <button onClick={() => setShowShrinkPanel(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--ink-3)' }}>✕</button>
+              </div>
+              <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+                {shrinking ? (
+                  <div style={{ color: 'var(--ink-3)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, padding: '24px 0', justifyContent: 'center' }}>
+                    <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>◐</span>
+                    {lang === 'kr' ? '압축 중…' : 'Compressing…'}
+                  </div>
+                ) : !shrinkData ? (
+                  <div style={{ color: 'var(--ink-3)', fontSize: 13, textAlign: 'center', padding: '24px 0' }}>
+                    {lang === 'kr' ? '결과가 없습니다.' : 'No results.'}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    {([
+                      ['logline', lang === 'kr' ? '한 줄 요약' : 'Logline', '⚡'],
+                      ['blurb', lang === 'kr' ? '뒷표지 소개' : 'Back-cover blurb', '📖'],
+                      ['synopsis', lang === 'kr' ? '시놉시스' : 'Synopsis', '📝'],
+                      ['outline', lang === 'kr' ? '챕터 개요' : 'Outline', '🗂'],
+                    ] as [keyof ShrinkData, string, string][]).map(([key, label, icon]) => shrinkData[key] ? (
+                      <div key={key} style={{ background: 'var(--surface-2)', borderRadius: 10, padding: 14 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-3)' }}>{icon} {label}</span>
+                          <button onClick={() => navigator.clipboard.writeText(shrinkData[key]!)}
+                            style={{ padding: '2px 8px', fontSize: 11, background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 5, cursor: 'pointer', color: 'var(--ink-2)' }}>
+                            {lang === 'kr' ? '복사' : 'Copy'}
+                          </button>
+                        </div>
+                        <div style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--ink-1)', whiteSpace: 'pre-wrap' }}>{shrinkData[key]}</div>
+                      </div>
+                    ) : null)}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 

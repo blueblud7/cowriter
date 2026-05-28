@@ -10,7 +10,7 @@ function getClient() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { text, allText, bible, lang, format } = await req.json();
+    const { text, allText, bible, lang, format, loreContext } = await req.json();
     const formatCtx = format ? FORMAT_AI_CONTEXT[format] : '';
     if (!text?.trim() || text.trim().length < 20) {
       return NextResponse.json({ contradictions: [], analysis: null, suggestions: [] });
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
         role: 'user',
         content: `당신은 숙련된 글쓰기 편집자입니다.${formatCtx ? ` 지금 분석할 글은 ${formatCtx}` : ''} 아래 내용을 깊이 분석하고 JSON으로만 응답해주세요.
 
-${prevContext ? `【이전 챕터 맥락】\n${prevContext}\n` : ''}${bibleLines.length ? `【Story Bible】\n${bibleLines.join('\n')}\n` : ''}【현재 챕터】
+${prevContext ? `【이전 챕터 맥락】\n${prevContext}\n` : ''}${bibleLines.length ? `【Story Bible】\n${bibleLines.join('\n')}\n` : ''}${loreContext ? `${loreContext}\n` : ''}【현재 챕터】
 ${text.slice(-2000)}
 
 아래 JSON 형식으로 분석해주세요 (모든 텍스트는 ${isKr ? '한국어' : '영어'}로):
