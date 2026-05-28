@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { InkiMascot } from './mascot';
 import type { Lang, T } from '@/lib/data';
 import { GENRES, THEMES, PREMISE } from '@/lib/data';
@@ -15,10 +15,11 @@ interface StoryBibleScreenProps {
 interface CharDraft {
   id: string; name: string; role: string; oneLine: string;
   age: string; traits: string; voice: string; wants: string; fears: string; arc: string;
+  keywords: string;
 }
 function emptyChar(lang: Lang): CharDraft {
   return { id: `c-${Date.now()}`, name: lang === 'kr' ? '새 캐릭터' : 'New character',
-    role: 'supporting', oneLine: '', age: '', traits: '', voice: '', wants: '', fears: '', arc: '' };
+    role: 'supporting', oneLine: '', age: '', traits: '', voice: '', wants: '', fears: '', arc: '', keywords: '' };
 }
 const ROLE_OPTIONS = [
   { id: 'protagonist', kr: '주인공', en: 'Protagonist' },
@@ -29,8 +30,61 @@ const ROLE_OPTIONS = [
 ];
 
 /* ── World ── */
-interface Place { id: string; name: string; note: string; }
-interface Obj    { id: string; name: string; note: string; }
+interface Place { id: string; name: string; note: string; keywords?: string; }
+interface Obj    { id: string; name: string; note: string; keywords?: string; }
+
+/* ── Story Structure Templates ── */
+interface TemplateBeat { title: string; desc: string; ch: string; }
+interface StoryTemplate { id: string; kr: string; en: string; beats: TemplateBeat[]; }
+const STORY_TEMPLATES: StoryTemplate[] = [
+  {
+    id: '3act', kr: '3막 구조', en: '3-Act Structure',
+    beats: [
+      { title: '발단 (세계 소개)', desc: '주인공의 일상 세계와 내면 결핍을 보여준다.', ch: '1' },
+      { title: '촉발 사건', desc: '주인공의 세계를 뒤흔드는 사건이 발생한다.', ch: '2' },
+      { title: '1막 전환 (결단)', desc: '주인공이 새로운 세계로 발을 내딛는 결단을 내린다.', ch: '3' },
+      { title: '2막 상승 (시련)', desc: '장애물과 갈등이 쌓이고 캐릭터가 시험받는다.', ch: '5' },
+      { title: '중간점 (전환)', desc: '이야기의 절반, 결정적 변화나 계시가 일어난다.', ch: '7' },
+      { title: '모든 것을 잃다', desc: '최대 위기. 모든 것이 무너지는 것처럼 보인다.', ch: '9' },
+      { title: '3막 전환 (돌파)', desc: '주인공이 내면의 결핍을 극복하고 반격에 나선다.', ch: '10' },
+      { title: '클라이맥스', desc: '최후의 대결. 주인공의 변화가 완성된다.', ch: '11' },
+      { title: '결말 (새로운 세계)', desc: '변화된 주인공의 새 일상을 보여준다.', ch: '12' },
+    ],
+  },
+  {
+    id: 'savethecat', kr: 'Save the Cat', en: 'Save the Cat',
+    beats: [
+      { title: '오프닝 이미지', desc: '이야기의 분위기와 주인공의 현재 상태를 압축한 한 장면.', ch: '1' },
+      { title: '주제 제시', desc: '이야기가 무엇에 관한 것인지 암시하는 대화나 장면.', ch: '1' },
+      { title: '촉발 사건 (카탈리스트)', desc: '주인공의 평범한 세계를 뒤흔드는 사건.', ch: '2' },
+      { title: '결단/2막 진입', desc: '주인공이 새로운 세계로 넘어가기로 결심한다.', ch: '3' },
+      { title: '재미와 게임 (Fun & Games)', desc: '이야기의 약속을 실현하는 핵심 장면들. 트레일러 장면들.', ch: '4' },
+      { title: '중간점 (Midpoint)', desc: '거짓된 승리 또는 거짓된 패배. 판돈이 올라간다.', ch: '6' },
+      { title: '모든 것을 잃다 (All Is Lost)', desc: '최악의 순간. 캐릭터가 가장 낮은 곳에 떨어진다.', ch: '9' },
+      { title: '피날레', desc: '주인공이 진정으로 변화해 문제를 해결한다.', ch: '11' },
+      { title: '마지막 이미지', desc: '오프닝 이미지와 대비되는, 변화를 증명하는 장면.', ch: '12' },
+    ],
+  },
+  {
+    id: 'heros', kr: '영웅의 여정', en: "Hero's Journey",
+    beats: [
+      { title: '일상 세계', desc: '영웅의 평범한 삶. 아직 모험이 시작되지 않은 세계.', ch: '1' },
+      { title: '모험의 부름', desc: '영웅에게 변화를 요구하는 사건이나 도전이 나타난다.', ch: '1' },
+      { title: '부름의 거부', desc: '영웅이 두려움이나 의무감으로 부름을 거부한다.', ch: '2' },
+      { title: '멘토와의 만남', desc: '영웅에게 조언과 도움을 주는 멘토가 등장한다.', ch: '2' },
+      { title: '첫 번째 관문 통과', desc: '영웅이 특별한 세계로 발을 내딛는다.', ch: '3' },
+      { title: '시험, 동료, 적', desc: '새로운 세계에서 규칙을 배우고 동료와 적을 만난다.', ch: '5' },
+      { title: '가장 깊은 동굴', desc: '가장 위험한 장소로 접근한다. 최대 위기 직전.', ch: '7' },
+      { title: '시련 (Ordeal)', desc: '죽음과 부활의 순간. 가장 큰 위기와 변화.', ch: '8' },
+      { title: '귀환의 길', desc: '영웅이 일상 세계로 돌아가려 한다. 추격전이 일어날 수도.', ch: '10' },
+      { title: '부활 (Resurrection)', desc: '마지막 시험. 영웅은 완전히 변화해 승리한다.', ch: '11' },
+      { title: '영약을 갖고 귀환', desc: '영웅이 세계를 변화시킬 뭔가를 갖고 돌아온다.', ch: '12' },
+    ],
+  },
+];
+
+/* ── Interview message ── */
+interface InterviewMsg { role: 'user' | 'assistant'; content: string; }
 
 /* ── Timeline ── */
 interface Beat { id: string; title: string; desc: string; ch: string; }
@@ -97,6 +151,89 @@ export function StoryBibleScreen({ t, lang, onClose, onJumpToChapter }: StoryBib
   /* timeline */
   const [beats, setBeats] = useState<Beat[]>([]);
   const addBeat  = () => setBeats(p => [...p, emptyBeat()]);
+
+  /* interview */
+  const [showInterview, setShowInterview] = useState(false);
+  const [interviewMsgs, setInterviewMsgs] = useState<InterviewMsg[]>([]);
+  const [interviewInput, setInterviewInput] = useState('');
+  const [interviewLoading, setInterviewLoading] = useState(false);
+  const interviewAbort = useRef<AbortController | null>(null);
+  const interviewEndRef = useRef<HTMLDivElement>(null);
+
+  const openInterview = (char: CharDraft) => {
+    setInterviewMsgs([{
+      role: 'assistant',
+      content: lang === 'kr'
+        ? `안녕하세요. 저는 ${char.name}입니다. 무엇이 궁금하신가요?`
+        : `Hello. I'm ${char.name}. What would you like to know?`,
+    }]);
+    setInterviewInput('');
+    setShowInterview(true);
+  };
+
+  const sendInterviewMsg = useCallback(async () => {
+    if (!interviewInput.trim() || !curChar || interviewLoading) return;
+    const userMsg: InterviewMsg = { role: 'user', content: interviewInput };
+    const nextMsgs = [...interviewMsgs, userMsg];
+    setInterviewMsgs(nextMsgs);
+    setInterviewInput('');
+    setInterviewLoading(true);
+    const controller = new AbortController();
+    interviewAbort.current = controller;
+    try {
+      const res = await fetch('/api/interview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ character: curChar, messages: nextMsgs, lang }),
+        signal: controller.signal,
+      });
+      const reader = res.body?.getReader();
+      if (!reader) return;
+      const decoder = new TextDecoder();
+      let content = '';
+      setInterviewMsgs(prev => [...prev, { role: 'assistant', content: '' }]);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done || controller.signal.aborted) break;
+        const chunk = decoder.decode(value, { stream: true });
+        if (chunk) {
+          content += chunk;
+          setInterviewMsgs(prev => {
+            const next = [...prev];
+            next[next.length - 1] = { role: 'assistant', content };
+            return next;
+          });
+        }
+      }
+    } catch {}
+    setInterviewLoading(false);
+  }, [interviewInput, interviewMsgs, curChar, lang, interviewLoading]);
+
+  useEffect(() => {
+    interviewEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [interviewMsgs]);
+
+  /* apply story structure template */
+  const applyTemplate = (tpl: StoryTemplate) => {
+    if (beats.length > 0 && !confirm(lang === 'kr' ? '기존 비트를 모두 지우고 템플릿을 적용할까요?' : 'Replace all beats with this template?')) return;
+    setBeats(tpl.beats.map(b => ({ ...b, id: `b-${Date.now()}-${Math.random().toString(36).slice(2)}` })));
+  };
+
+  // Load saved Bible data from localStorage on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('cowriter-bible');
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (saved.characters?.length) setChars(saved.characters);
+      if (saved.rules?.length) setRules(saved.rules);
+      if (saved.backstory) setBackstory(saved.backstory);
+      if (saved.places?.length) setPlaces(saved.places);
+      if (saved.objects?.length) setObjects(saved.objects);
+      if (saved.beats?.length) setBeats(saved.beats);
+      if (saved.premise) setPremise(p => ({ ...p, ...saved.premise }));
+    } catch {}
+  }, []);
 
   // Persist Bible data for AI consistency checks
   useEffect(() => {
@@ -279,6 +416,18 @@ export function StoryBibleScreen({ t, lang, onClose, onJumpToChapter }: StoryBib
                                 onChange={v => patchChar({ [field]: v })}
                                 placeholder={ph} multiline />
                   ))}
+                  <FieldInput
+                    label={lang === 'kr' ? '📌 Lore 키워드 (자동 주입 트리거)' : '📌 Lore Keywords (trigger words)'}
+                    value={curChar.keywords}
+                    onChange={v => patchChar({ keywords: v })}
+                    placeholder={lang === 'kr' ? '쉼표로 구분: 아리아, 아리, Aria' : 'Comma-separated: Aria, the girl, her'}
+                  />
+                </div>
+                <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end' }}>
+                  <button onClick={() => openInterview(curChar)}
+                    style={{ padding: '7px 16px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    🎙 {lang === 'kr' ? 'AI 인터뷰' : 'AI Interview'}
+                  </button>
                 </div>
               </section>
             ) : (
@@ -320,6 +469,9 @@ export function StoryBibleScreen({ t, lang, onClose, onJumpToChapter }: StoryBib
                       <input className="frame-row-input" value={p.note}
                              onChange={e => setPlaces(prev => prev.map(x => x.id === p.id ? { ...x, note: e.target.value } : x))}
                              placeholder={lang === 'kr' ? '한 줄 메모' : 'Short note'} />
+                      <input className="frame-row-input" value={p.keywords || ''}
+                             onChange={e => setPlaces(prev => prev.map(x => x.id === p.id ? { ...x, keywords: e.target.value } : x))}
+                             placeholder={lang === 'kr' ? '📌 Lore 키워드 (쉼표 구분)' : '📌 Lore keywords (comma-sep)'} />
                     </div>
                     <DeleteBtn lang={lang} onClick={() => setPlaces(prev => prev.filter(x => x.id !== p.id))} />
                   </div>
@@ -335,14 +487,21 @@ export function StoryBibleScreen({ t, lang, onClose, onJumpToChapter }: StoryBib
               <div className="bible-card-label">{t.w_objects}</div>
               <div className="world-objs" style={{ flexDirection: 'column', gap: 8 }}>
                 {objects.map(o => (
-                  <div key={o.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <div className="world-obj-icon">◌</div>
-                    <input className="frame-row-input" style={{ flex: 1 }} value={o.name}
-                           onChange={e => setObjects(prev => prev.map(x => x.id === o.id ? { ...x, name: e.target.value } : x))}
-                           placeholder={lang === 'kr' ? '소품 이름' : 'Object name'} />
-                    <input className="frame-row-input" style={{ flex: 2 }} value={o.note}
-                           onChange={e => setObjects(prev => prev.map(x => x.id === o.id ? { ...x, note: e.target.value } : x))}
-                           placeholder={lang === 'kr' ? '메모' : 'Note'} />
+                  <div key={o.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                    <div className="world-obj-icon" style={{ marginTop: 4 }}>◌</div>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <input className="frame-row-input" style={{ flex: 1 }} value={o.name}
+                               onChange={e => setObjects(prev => prev.map(x => x.id === o.id ? { ...x, name: e.target.value } : x))}
+                               placeholder={lang === 'kr' ? '소품 이름' : 'Object name'} />
+                        <input className="frame-row-input" style={{ flex: 2 }} value={o.note}
+                               onChange={e => setObjects(prev => prev.map(x => x.id === o.id ? { ...x, note: e.target.value } : x))}
+                               placeholder={lang === 'kr' ? '메모' : 'Note'} />
+                      </div>
+                      <input className="frame-row-input" value={o.keywords || ''}
+                             onChange={e => setObjects(prev => prev.map(x => x.id === o.id ? { ...x, keywords: e.target.value } : x))}
+                             placeholder={lang === 'kr' ? '📌 Lore 키워드 (쉼표 구분)' : '📌 Lore keywords (comma-sep)'} />
+                    </div>
                     <DeleteBtn lang={lang} onClick={() => setObjects(prev => prev.filter(x => x.id !== o.id))} />
                   </div>
                 ))}
@@ -376,11 +535,23 @@ export function StoryBibleScreen({ t, lang, onClose, onJumpToChapter }: StoryBib
         {tab === 'timeline' && (
           <div className="bible-timeline fade-in">
             <section className="card timeline-list" style={{ width: '100%' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                 <div className="bible-card-label" style={{ margin: 0 }}>{lang === 'kr' ? '스토리 비트' : 'Story Beats'}</div>
                 <button className="btn btn-ghost" style={{ fontSize: 13 }} onClick={addBeat}>
                   + {lang === 'kr' ? '비트 추가' : 'Add beat'}
                 </button>
+              </div>
+              {/* Story structure templates */}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, color: 'var(--ink-4)', alignSelf: 'center', marginRight: 2 }}>
+                  {lang === 'kr' ? '템플릿:' : 'Template:'}
+                </span>
+                {STORY_TEMPLATES.map(tpl => (
+                  <button key={tpl.id} onClick={() => applyTemplate(tpl)}
+                    style={{ padding: '4px 12px', fontSize: 12, fontWeight: 500, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 999, cursor: 'pointer', color: 'var(--ink-2)', whiteSpace: 'nowrap', transition: 'all 0.15s' }}>
+                    {tpl[lang]}
+                  </button>
+                ))}
               </div>
 
               {beats.length === 0 ? (
@@ -417,6 +588,64 @@ export function StoryBibleScreen({ t, lang, onClose, onJumpToChapter }: StoryBib
           </div>
         )}
       </div>
+
+      {/* Character AI Interview modal */}
+      {showInterview && curChar && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 300, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '0 0 24px' }}
+             onClick={() => setShowInterview(false)}>
+          <div style={{ background: 'var(--surface-1)', borderRadius: 16, boxShadow: '0 -4px 40px rgba(0,0,0,0.2)', width: '100%', maxWidth: 560, height: '70vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+               onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+              <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700 }}>
+                {(curChar.name || '?')[0]}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>{curChar.name}</div>
+                <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>
+                  🎙 {lang === 'kr' ? 'AI 인터뷰 · 캐릭터로서 답변합니다' : 'AI Interview · answers in character'}
+                </div>
+              </div>
+              <button onClick={() => { interviewAbort.current?.abort(); setShowInterview(false); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--ink-3)' }}>✕</button>
+            </div>
+            {/* Messages */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {interviewMsgs.map((m, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                  <div style={{
+                    maxWidth: '80%', padding: '10px 14px', borderRadius: m.role === 'user' ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
+                    background: m.role === 'user' ? 'var(--accent)' : 'var(--surface-2)',
+                    color: m.role === 'user' ? '#fff' : 'var(--ink-1)',
+                    fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap',
+                  }}>
+                    {m.content || (interviewLoading && i === interviewMsgs.length - 1 ? (
+                      <span style={{ opacity: 0.6, fontStyle: 'italic' }}>{lang === 'kr' ? '생각 중…' : 'thinking…'}</span>
+                    ) : '')}
+                  </div>
+                </div>
+              ))}
+              <div ref={interviewEndRef} />
+            </div>
+            {/* Input */}
+            <div style={{ padding: '12px 18px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8, flexShrink: 0 }}>
+              <input
+                value={interviewInput}
+                onChange={e => setInterviewInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendInterviewMsg(); } }}
+                placeholder={lang === 'kr' ? `${curChar.name}에게 질문하세요…` : `Ask ${curChar.name} something…`}
+                style={{ flex: 1, padding: '9px 12px', fontSize: 13, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--ink-1)', outline: 'none' }}
+                disabled={interviewLoading}
+                autoFocus
+              />
+              <button onClick={sendInterviewMsg} disabled={interviewLoading || !interviewInput.trim()}
+                style={{ padding: '9px 16px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 10, cursor: interviewLoading ? 'not-allowed' : 'pointer', opacity: interviewLoading ? 0.6 : 1 }}>
+                {lang === 'kr' ? '전송' : 'Send'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

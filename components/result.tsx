@@ -220,11 +220,13 @@ interface AnalysisScreenProps {
   styles: Style[];
   sample: Sample;
   chapterTitle?: string;
+  chapterTitles?: string[];
+  allChapterBodies?: string[];
   onClose: () => void;
   onApply: (styleId?: string) => void;
 }
 
-export function AnalysisScreen({ t, lang, styles, sample, chapterTitle, onClose, onApply }: AnalysisScreenProps) {
+export function AnalysisScreen({ t, lang, styles, sample, chapterTitle, chapterTitles, allChapterBodies, onClose, onApply }: AnalysisScreenProps) {
   const [ai, setAi] = useState<AnalysisResult | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const hasText = sample.raw.trim().length > 0;
@@ -485,6 +487,55 @@ export function AnalysisScreen({ t, lang, styles, sample, chapterTitle, onClose,
               </ul>
             </div>
           )}
+
+          {allChapterBodies && allChapterBodies.length > 1 && (() => {
+            const wpm = lang === 'kr' ? 200 : 250;
+            const chapData = allChapterBodies.map((body, i) => {
+              const wc = body.trim() ? body.trim().split(/\s+/).length : 0;
+              return { label: chapterTitles?.[i] || (lang === 'kr' ? `Ch ${i + 1}` : `Ch ${i + 1}`), wc };
+            });
+            const maxWc = Math.max(...chapData.map(d => d.wc), 1);
+            const totalWc = chapData.reduce((s, d) => s + d.wc, 0);
+            const totalMins = Math.round(totalWc / wpm);
+            return (
+              <div className="card" style={{ gridColumn: '1 / -1' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                  <div className="an-card-label" style={{ margin: 0 }}>
+                    📈 {lang === 'kr' ? '챕터별 분량 (페이싱)' : 'Chapter Pacing'}
+                  </div>
+                  <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>
+                    {lang === 'kr' ? `전체 ${totalWc.toLocaleString()}단어 · 약 ${totalMins}분` : `${totalWc.toLocaleString()} words total · ~${totalMins} min read`}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 100, overflowX: 'auto', paddingBottom: 4 }}>
+                  {chapData.map((d, i) => {
+                    const pct = d.wc / maxWc;
+                    const isActive = chapterTitles && chapterTitle && (chapterTitles[i] === chapterTitle || `Ch ${i + 1}` === chapterTitle);
+                    return (
+                      <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 40, flex: 1, maxWidth: 64 }}>
+                        <span style={{ fontSize: 10, color: 'var(--ink-4)', marginBottom: 2 }}>{d.wc > 0 ? d.wc.toLocaleString() : ''}</span>
+                        <div style={{
+                          width: '100%', borderRadius: '4px 4px 0 0',
+                          height: `${Math.max(pct * 72, d.wc > 0 ? 4 : 0)}px`,
+                          background: isActive ? 'var(--accent)' : d.wc === 0 ? 'var(--surface-2)' : 'var(--accent)',
+                          opacity: isActive ? 1 : d.wc === 0 ? 0.3 : 0.45,
+                          transition: 'height 0.3s',
+                        }} />
+                        <span style={{ fontSize: 10, color: isActive ? 'var(--accent)' : 'var(--ink-4)', fontWeight: isActive ? 700 : 400, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
+                          {d.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ marginTop: 8, fontSize: 11, color: 'var(--ink-4)' }}>
+                  {lang === 'kr'
+                    ? `긴 챕터 = 느린 페이스 · 짧은 챕터 = 빠른 템포. 강조 표시 = 현재 챕터.`
+                    : `Tall bars = slower pace · Short bars = faster tempo. Highlighted = current chapter.`}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
       )}

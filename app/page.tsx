@@ -285,6 +285,8 @@ export default function CoWriterApp() {
             t={t} lang={lang} styles={STYLES}
             sample={editorSample}
             chapterTitle={currentChapter?.title}
+            chapterTitles={dbChapters.map(r => r.title || (lang === 'kr' ? `챕터 ${r.n}` : `Chapter ${r.n}`))}
+            allChapterBodies={dbChapters.map(r => r.body || '')}
             onClose={() => setRoute('editor')}
             onApply={(styleId) => { setSelectedStyleId(styleId || 'literary'); setRoute('diff'); }}
           />
