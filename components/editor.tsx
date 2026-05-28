@@ -6,6 +6,7 @@ import { WRITING_FORMATS } from '@/lib/data';
 import { getSnapshots, saveSnapshot, deleteSnapshot, type Snapshot } from '@/lib/snapshots';
 import { getDrafts, createDraft, deleteDraft, type Draft } from '@/lib/drafts';
 import { getTriggeredLore, countTriggeredLore } from '@/lib/lore-injection';
+import { addWordsToday, getTodayWords, getTodayProgress, getDailyGoal, getStreak } from '@/lib/goals';
 
 interface CheckIssue {
   severity: 'warning' | 'error';
@@ -111,6 +112,16 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
   // TTS
   const [reading, setReading] = useState(false);
 
+  // Find & Replace
+  const [showFindReplace, setShowFindReplace] = useState(false);
+  const [findQ, setFindQ] = useState('');
+  const [replaceQ, setReplaceQ] = useState('');
+  const [matchIdx, setMatchIdx] = useState(0);
+  const findInputRef = useRef<HTMLInputElement>(null);
+
+  // Writing goals
+  const prevBodyWordCount = useRef(0);
+
   // Canvas pan/zoom
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -175,6 +186,12 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
         if (stageRef.current) stageRef.current.style.cursor = 'grab';
       }
       if ((e.metaKey || e.ctrlKey) && e.key === '0') { e.preventDefault(); resetCanvas(); }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault();
+        setShowFindReplace(v => !v);
+        setTimeout(() => findInputRef.current?.focus(), 50);
+      }
+      if (e.key === 'Escape' && showFindReplace) { setShowFindReplace(false); }
       if ((e.metaKey || e.ctrlKey) && (e.key === '=' || e.key === '+')) {
         e.preventDefault();
         const s = Math.min(3, tfRef.current.scale + 0.1);
@@ -267,9 +284,15 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => onSave(val), 1500);
     }
+    const wc = val.trim().split(/\s+/).filter(Boolean).length;
+    // Track daily word goal progress
+    if (typeof window !== 'undefined') {
+      const delta = wc - prevBodyWordCount.current;
+      if (delta > 0) addWordsToday(delta);
+      prevBodyWordCount.current = wc;
+    }
     // Auto-snapshot every 500 words
     if (chapterId) {
-      const wc = val.trim().split(/\s+/).filter(Boolean).length;
       if (wc > 0 && Math.floor(wc / 500) > Math.floor(prevWordCount.current / 500)) {
         const snap = saveSnapshot(chapterId, val, 'auto');
         setSnaps(prev => [snap, ...prev]);
@@ -454,6 +477,55 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
     window.speechSynthesis.speak(utter);
   }, [reading, selectedText, body, lang]);
 
+  const getMatches = useCallback((query: string): number[] => {
+    if (!query) return [];
+    const positions: number[] = [];
+    const lower = body.toLowerCase();
+    const q = query.toLowerCase();
+    let start = 0;
+    while (true) {
+      const idx = lower.indexOf(q, start);
+      if (idx === -1) break;
+      positions.push(idx);
+      start = idx + 1;
+    }
+    return positions;
+  }, [body]);
+
+  const navigateMatch = useCallback((direction: 1 | -1) => {
+    const matches = getMatches(findQ);
+    if (!matches.length || !textareaRef.current) return;
+    const next = ((matchIdx + direction) + matches.length) % matches.length;
+    setMatchIdx(next);
+    const start = matches[next];
+    textareaRef.current.focus();
+    textareaRef.current.setSelectionRange(start, start + findQ.length);
+  }, [findQ, matchIdx, getMatches]);
+
+  const replaceCurrent = useCallback(() => {
+    const matches = getMatches(findQ);
+    if (!matches.length) return;
+    const safeIdx = matchIdx % matches.length;
+    const pos = matches[safeIdx];
+    const newBody = body.slice(0, pos) + replaceQ + body.slice(pos + findQ.length);
+    handleBodyChange(newBody);
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(pos, pos + replaceQ.length);
+      }
+    }, 0);
+  }, [findQ, replaceQ, matchIdx, body, getMatches]);
+
+  const replaceAll = useCallback(() => {
+    if (!findQ) return;
+    const count = getMatches(findQ).length;
+    if (count === 0) return;
+    const regex = new RegExp(findQ.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    handleBodyChange(body.replace(regex, replaceQ));
+    setMatchIdx(0);
+  }, [findQ, replaceQ, body, getMatches]);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Tab' && suggestion) {
       e.preventDefault();
@@ -503,6 +575,33 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
         </div>
         <div className="spacer" />
         <span className="save-pill">{t.ed_save}</span>
+        {/* Writing goal pill */}
+        {typeof window !== 'undefined' && (() => {
+          const progress = getTodayProgress();
+          const todayWc = getTodayWords();
+          const goal = getDailyGoal();
+          const streak = getStreak();
+          if (goal <= 0) return null;
+          const done = progress >= 1;
+          return (
+            <div title={lang === 'kr'
+              ? `오늘 목표: ${todayWc.toLocaleString()} / ${goal.toLocaleString()}단어${streak > 1 ? ` · 🔥 ${streak}일 연속` : ''}`
+              : `Today: ${todayWc.toLocaleString()} / ${goal.toLocaleString()} words${streak > 1 ? ` · 🔥 ${streak}-day streak` : ''}`}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 10px 3px 8px', borderRadius: 999,
+                       background: done ? 'rgba(16,185,129,0.15)' : 'var(--surface-2)',
+                       border: `1px solid ${done ? 'rgba(16,185,129,0.35)' : 'var(--border)'}`,
+                       cursor: 'default', whiteSpace: 'nowrap' }}>
+              <div style={{ width: 32, height: 4, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${Math.min(progress * 100, 100)}%`,
+                              background: done ? '#10b981' : 'var(--accent)', borderRadius: 2, transition: 'width 0.4s' }} />
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 600, color: done ? '#059669' : 'var(--ink-3)' }}>
+                {done ? '🎯' : `${Math.round(progress * 100)}%`}
+                {streak > 1 && ` 🔥${streak}`}
+              </span>
+            </div>
+          );
+        })()}
         {/* Auto-write */}
         {autoWriting ? (
           <button onClick={stopAutoWrite}
@@ -607,6 +706,61 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
           {t.ed_transform}
         </button>
       </div>
+
+      {/* Find & Replace panel */}
+      {showFindReplace && (
+        <div style={{ position: 'fixed', top: 52, right: 0, width: 340, background: 'var(--surface-1)',
+                      borderLeft: '1px solid var(--border)', borderBottom: '1px solid var(--border)',
+                      zIndex: 200, padding: '12px 16px', boxShadow: '-4px 4px 20px rgba(0,0,0,0.1)' }}>
+          {(() => {
+            const matches = getMatches(findQ);
+            const safeIdx = matches.length ? matchIdx % matches.length : 0;
+            return (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <input ref={findInputRef} value={findQ}
+                    onChange={e => { setFindQ(e.target.value); setMatchIdx(0); }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { e.preventDefault(); navigateMatch(e.shiftKey ? -1 : 1); }
+                      if (e.key === 'Escape') setShowFindReplace(false);
+                    }}
+                    placeholder={lang === 'kr' ? '찾기…' : 'Find…'}
+                    style={{ flex: 1, padding: '6px 10px', fontSize: 13, background: 'var(--surface-2)',
+                             border: '1px solid var(--border)', borderRadius: 7, color: 'var(--ink-1)', outline: 'none' }} />
+                  <span style={{ fontSize: 11, color: 'var(--ink-4)', whiteSpace: 'nowrap', minWidth: 40, textAlign: 'right' }}>
+                    {findQ && matches.length > 0 ? `${safeIdx + 1}/${matches.length}` : findQ ? '0' : ''}
+                  </span>
+                  <button onClick={() => navigateMatch(-1)} disabled={!matches.length}
+                    style={{ padding: '4px 8px', fontSize: 13, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 6, cursor: matches.length ? 'pointer' : 'not-allowed', opacity: matches.length ? 1 : 0.4 }}>↑</button>
+                  <button onClick={() => navigateMatch(1)} disabled={!matches.length}
+                    style={{ padding: '4px 8px', fontSize: 13, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 6, cursor: matches.length ? 'pointer' : 'not-allowed', opacity: matches.length ? 1 : 0.4 }}>↓</button>
+                  <button onClick={() => setShowFindReplace(false)}
+                    style={{ padding: '4px 6px', fontSize: 13, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--ink-4)' }}>✕</button>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input value={replaceQ} onChange={e => setReplaceQ(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); replaceCurrent(); } }}
+                    placeholder={lang === 'kr' ? '바꾸기…' : 'Replace with…'}
+                    style={{ flex: 1, padding: '6px 10px', fontSize: 13, background: 'var(--surface-2)',
+                             border: '1px solid var(--border)', borderRadius: 7, color: 'var(--ink-1)', outline: 'none' }} />
+                  <button onClick={replaceCurrent} disabled={!matches.length}
+                    style={{ padding: '5px 10px', fontSize: 12, fontWeight: 600, background: 'var(--surface-2)',
+                             border: '1px solid var(--border)', borderRadius: 6, cursor: matches.length ? 'pointer' : 'not-allowed',
+                             opacity: matches.length ? 1 : 0.4, color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>
+                    {lang === 'kr' ? '바꾸기' : 'Replace'}
+                  </button>
+                  <button onClick={replaceAll} disabled={!matches.length}
+                    style={{ padding: '5px 10px', fontSize: 12, fontWeight: 600, background: matches.length ? 'var(--accent)' : 'var(--surface-2)',
+                             border: 'none', borderRadius: 6, cursor: matches.length ? 'pointer' : 'not-allowed',
+                             opacity: matches.length ? 1 : 0.4, color: matches.length ? '#fff' : 'var(--ink-4)', whiteSpace: 'nowrap' }}>
+                    {lang === 'kr' ? '모두' : 'All'}
+                  </button>
+                </div>
+              </>
+            );
+          })()}
+        </div>
+      )}
 
       <div className={`editor-shell editor-shell-${level}`}>
         {/* Canvas stage */}

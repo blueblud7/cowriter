@@ -7,6 +7,7 @@ import { EditorScreen, StylePicker } from '@/components/editor';
 import { DiffView, AnalysisScreen, FocusScreen } from '@/components/result';
 import { StoryBibleScreen } from '@/components/bible';
 import { FormatPicker } from '@/components/format-picker';
+import { ExportModal } from '@/components/export-modal';
 import {
   STYLES, STARTERS, SAMPLE, NOTES, CHAPTERS, T,
   type Lang, type Level, type Palette, type Typeset, type Route, type Chapter,
@@ -52,6 +53,7 @@ export default function CoWriterApp() {
   const [initializing, setInitializing] = useState(true);
   const [writingFormat, setWritingFormat] = useState('novel_literary');
   const [showFormatPicker, setShowFormatPicker] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const liveBodyRef = useRef<string>('');
 
   const t = T[lang];
@@ -227,6 +229,7 @@ export default function CoWriterApp() {
         route={route} setRoute={setRoute}
         onLevelClick={() => setRoute('onboarding')}
         onNewChapter={handleNewChapter}
+        onExport={() => setShowExportModal(true)}
         userName={user?.name}
         userEmail={user?.guest ? (lang === 'kr' ? '게스트 모드' : 'Guest mode') : user?.email}
         onSettings={() => setShowSettings(v => !v)}
@@ -300,6 +303,15 @@ export default function CoWriterApp() {
           />
         )}
       </main>
+
+      {showExportModal && (
+        <ExportModal
+          lang={lang}
+          projectTitle={dbChapters[0]?.title || (lang === 'kr' ? '나의 이야기' : 'My Story')}
+          chapters={dbChapters.map(r => ({ n: r.n, title: r.title || `Chapter ${r.n}`, body: r.body || '' }))}
+          onClose={() => setShowExportModal(false)}
+        />
+      )}
 
       {showFormatPicker && (
         <FormatPicker

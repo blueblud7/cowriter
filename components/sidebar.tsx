@@ -13,12 +13,13 @@ interface SidebarProps {
   setRoute: (r: Route) => void;
   onLevelClick: () => void;
   onNewChapter?: () => void;
+  onExport?: () => void;
   userName?: string;
   userEmail?: string;
   onSettings?: () => void;
 }
 
-export function Sidebar({ t, lang, level, chapters, currentChapter, setCurrentChapter, route, setRoute, onLevelClick, onNewChapter, userName, userEmail, onSettings }: SidebarProps) {
+export function Sidebar({ t, lang, level, chapters, currentChapter, setCurrentChapter, route, setRoute, onLevelClick, onNewChapter, onExport, userName, userEmail, onSettings }: SidebarProps) {
   const levelLabels: Record<Level, string> = {
     beginner: t.lvl_beginner_name,
     growing:  t.lvl_growing_name,
@@ -68,10 +69,10 @@ export function Sidebar({ t, lang, level, chapters, currentChapter, setCurrentCh
             <span>{lang === 'kr' ? '분석' : 'Analysis'}</span>
           </button>
         )}
-        <button className="nav-item" disabled style={{ opacity: 0.4, cursor: 'default' }}
-                title={lang === 'kr' ? '준비 중이에요' : 'Coming soon'}>
-          <span className="nav-icon">▤</span>
-          <span>{t.nav_archive}</span>
+        <button className="nav-item" onClick={onExport}
+                title={lang === 'kr' ? '내보내기 (TXT / MD / PDF)' : 'Export (TXT / MD / PDF)'}>
+          <span className="nav-icon">📤</span>
+          <span>{lang === 'kr' ? '내보내기' : 'Export'}</span>
         </button>
       </nav>
 
