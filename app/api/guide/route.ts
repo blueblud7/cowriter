@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { NextRequest, NextResponse } from 'next/server';
+import { FORMAT_AI_CONTEXT } from '@/lib/data';
 
 let client: OpenAI | null = null;
 function getClient() {
@@ -9,7 +10,8 @@ function getClient() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { text, allText, bible, lang } = await req.json();
+    const { text, allText, bible, lang, format } = await req.json();
+    const formatCtx = format ? FORMAT_AI_CONTEXT[format] : '';
     if (!text?.trim() || text.trim().length < 20) {
       return NextResponse.json({ contradictions: [], analysis: null, suggestions: [] });
     }
@@ -38,7 +40,7 @@ export async function POST(req: NextRequest) {
       max_completion_tokens: 1400,
       messages: [{
         role: 'user',
-        content: `당신은 숙련된 소설 편집자입니다. 아래 소설을 깊이 분석하고 JSON으로만 응답해주세요.
+        content: `당신은 숙련된 글쓰기 편집자입니다.${formatCtx ? ` 지금 분석할 글은 ${formatCtx}` : ''} 아래 내용을 깊이 분석하고 JSON으로만 응답해주세요.
 
 ${prevContext ? `【이전 챕터 맥락】\n${prevContext}\n` : ''}${bibleLines.length ? `【Story Bible】\n${bibleLines.join('\n')}\n` : ''}【현재 챕터】
 ${text.slice(-2000)}

@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { NextRequest } from 'next/server';
+import { FORMAT_AI_CONTEXT } from '@/lib/data';
 
 let client: OpenAI | null = null;
 function getClient() {
@@ -9,7 +10,8 @@ function getClient() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { text, allText, bible, lang } = await req.json();
+    const { text, allText, bible, lang, format } = await req.json();
+    const formatCtx = format ? FORMAT_AI_CONTEXT[format] : '';
     if (!text?.trim()) return new Response('', { status: 200 });
 
     const bibleLines: string[] = [];
@@ -32,7 +34,7 @@ export async function POST(req: NextRequest) {
       stream: true,
       messages: [{
         role: 'user',
-        content: `당신은 재능 있는 ${isKr ? '한국어' : '영어'} 소설가입니다. 지금까지의 이야기를 완벽히 이해하고, 이어서 써주세요.
+        content: `당신은 재능 있는 ${isKr ? '한국어' : '영어'} 작가입니다.${formatCtx ? ` 지금 ${formatCtx}` : ''} 지금까지의 내용을 완벽히 이해하고 이어서 써주세요.
 
 ${prevContext ? `【이전 챕터 맥락】\n${prevContext}\n\n` : ''}${bibleLines.length ? `【캐릭터/설정】\n${bibleLines.join('\n')}\n\n` : ''}【현재 챕터 - 여기서 이어서 씀】
 ${text.slice(-1500)}

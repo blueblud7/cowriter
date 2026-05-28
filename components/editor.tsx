@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { InkiMascot } from './mascot';
 import type { Level, Lang, Chapter, Style, Starter, Sample, T } from '@/lib/data';
+import { WRITING_FORMATS } from '@/lib/data';
 import { getSnapshots, saveSnapshot, deleteSnapshot, type Snapshot } from '@/lib/snapshots';
 import { getDrafts, createDraft, deleteDraft, type Draft } from '@/lib/drafts';
 
@@ -34,13 +35,16 @@ interface EditorScreenProps {
   onBodyChange?: (body: string) => void;
   chapterId?: string;
   allChapterBodies?: string[];
+  writingFormat?: string;
+  onFormatPick?: () => void;
   tone?: string;
   length?: string;
   onToneChange?: (v: string) => void;
   onLengthChange?: (v: string) => void;
 }
 
-export function EditorScreen({ t, lang, level, chapter, sample, styles, starters, onTransform, onFocus, onAnalyze, onStyleClick, onSave, onBodyChange, chapterId, allChapterBodies, tone = 'neutral', length = 'keep', onToneChange, onLengthChange }: EditorScreenProps) {
+export function EditorScreen({ t, lang, level, chapter, sample, styles, starters, onTransform, onFocus, onAnalyze, onStyleClick, onSave, onBodyChange, chapterId, allChapterBodies, writingFormat = 'novel_literary', onFormatPick, tone = 'neutral', length = 'keep', onToneChange, onLengthChange }: EditorScreenProps) {
+  const formatData = WRITING_FORMATS.find(f => f.id === writingFormat);
   const [title, setTitle] = useState(chapter.title);
   const [body, setBody] = useState(sample.raw);
   const [styleQuery, setStyleQuery] = useState('');
@@ -208,7 +212,7 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
       const res = await fetch('/api/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, lang }),
+        body: JSON.stringify({ text, lang, format: writingFormat }),
       });
       const data = await res.json();
       if (data.completion) setSuggestion(data.completion);
@@ -260,7 +264,7 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
       const res = await fetch('/api/check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: body, bible, lang }),
+        body: JSON.stringify({ text: body, bible, lang, format: writingFormat }),
       });
       const data = await res.json();
       setCheckIssues(data.issues || []);
@@ -302,7 +306,7 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
       const res = await fetch('/api/guide', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: body, allText, bible, lang }),
+        body: JSON.stringify({ text: body, allText, bible, lang, format: writingFormat }),
       });
       const data = await res.json();
       setGuideData(data);
@@ -324,7 +328,7 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
       const res = await fetch('/api/autowrite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: body, allText, bible, lang }),
+        body: JSON.stringify({ text: body, allText, bible, lang, format: writingFormat }),
         signal: controller.signal,
       });
       const reader = res.body?.getReader();
@@ -378,6 +382,12 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
   return (
     <>
       <div className="topbar">
+        {/* Writing format badge */}
+        <button onClick={onFormatPick}
+          style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 10px 3px 8px', fontSize: 12, fontWeight: 600, background: formatData ? formatData.swatch + '18' : 'var(--surface-2)', border: `1px solid ${formatData ? formatData.swatch + '44' : 'var(--border)'}`, borderRadius: 999, cursor: 'pointer', color: formatData?.swatch || 'var(--ink-2)', whiteSpace: 'nowrap', transition: 'all 0.15s' }}>
+          <span style={{ fontSize: 14 }}>{formatData?.icon || '📖'}</span>
+          {formatData?.[lang].name || (lang === 'kr' ? '형식 선택' : 'Format')}
+        </button>
         <div className="crumb">
           <span>{t.nav_drafts}</span>
           <span>›</span>

@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { NextRequest, NextResponse } from 'next/server';
+import { FORMAT_AI_CONTEXT } from '@/lib/data';
 
 let client: OpenAI | null = null;
 function getClient() {
@@ -9,7 +10,8 @@ function getClient() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { text, bible, lang } = await req.json();
+    const { text, bible, lang, format } = await req.json();
+    const formatCtx = format ? FORMAT_AI_CONTEXT[format] : '';
     if (!text?.trim() || text.trim().length < 30) return NextResponse.json({ issues: [] });
 
     const lines: string[] = [];
@@ -37,7 +39,7 @@ export async function POST(req: NextRequest) {
       max_completion_tokens: 700,
       messages: [{
         role: 'user',
-        content: `당신은 소설 일관성 검사 AI입니다. Story Bible과 챕터 텍스트를 비교해 설정 불일치를 찾아주세요.
+        content: `당신은 글쓰기 일관성 검사 AI입니다.${formatCtx ? ` 이 글은 ${formatCtx}` : ''} Story Bible과 챕터 텍스트를 비교해 설정 불일치를 찾아주세요.
 
 Story Bible:
 ${lines.join('\n')}

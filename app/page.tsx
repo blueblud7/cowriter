@@ -6,6 +6,7 @@ import { Sidebar, DashboardScreen } from '@/components/sidebar';
 import { EditorScreen, StylePicker } from '@/components/editor';
 import { DiffView, AnalysisScreen, FocusScreen } from '@/components/result';
 import { StoryBibleScreen } from '@/components/bible';
+import { FormatPicker } from '@/components/format-picker';
 import {
   STYLES, STARTERS, SAMPLE, NOTES, CHAPTERS, T,
   type Lang, type Level, type Palette, type Typeset, type Route, type Chapter,
@@ -49,6 +50,8 @@ export default function CoWriterApp() {
   const [selectedTone, setSelectedTone] = useState('neutral');
   const [selectedLength, setSelectedLength] = useState('keep');
   const [initializing, setInitializing] = useState(true);
+  const [writingFormat, setWritingFormat] = useState('novel_literary');
+  const [showFormatPicker, setShowFormatPicker] = useState(false);
   const liveBodyRef = useRef<string>('');
 
   const t = T[lang];
@@ -102,6 +105,15 @@ export default function CoWriterApp() {
     if (uid) await loadChapters(uid);
     setRoute('onboarding');
   }, [loadChapters, lang]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('cowriter-format');
+    if (saved) setWritingFormat(saved);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('cowriter-format', writingFormat);
+  }, [writingFormat]);
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -249,6 +261,8 @@ export default function CoWriterApp() {
             onBodyChange={(body) => { liveBodyRef.current = body; }}
             chapterId={currentChapterId ?? undefined}
             allChapterBodies={dbChapters.map(r => r.body || '').filter(b => b.trim())}
+            writingFormat={writingFormat}
+            onFormatPick={() => setShowFormatPicker(true)}
             tone={selectedTone} length={selectedLength}
             onToneChange={setSelectedTone} onLengthChange={setSelectedLength}
           />
@@ -284,6 +298,15 @@ export default function CoWriterApp() {
           />
         )}
       </main>
+
+      {showFormatPicker && (
+        <FormatPicker
+          lang={lang}
+          current={writingFormat}
+          onApply={setWritingFormat}
+          onClose={() => setShowFormatPicker(false)}
+        />
+      )}
 
       {pickerOpen && (
         <StylePicker

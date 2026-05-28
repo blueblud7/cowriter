@@ -31,6 +31,62 @@ export type Level = 'beginner' | 'growing' | 'pro';
 export type Palette = 'paper' | 'sunset' | 'sage' | 'twilight';
 export type Typeset = 'manuscript' | 'editorial' | 'modern';
 export type Route = 'auth' | 'onboarding' | 'dashboard' | 'editor' | 'diff' | 'analysis' | 'focus' | 'bible';
+export type WritingCategory = 'fiction' | 'essay' | 'journal' | 'nonfiction' | 'poetry';
+
+export interface WritingFormat {
+  id: string; icon: string; category: WritingCategory; swatch: string;
+  kr: { name: string; desc: string };
+  en: { name: string; desc: string };
+}
+
+export const WRITING_FORMATS: WritingFormat[] = [
+  // Fiction
+  { id: 'novel_literary',  icon: '📖', category: 'fiction',   swatch: '#C8633D', kr: { name: '순문학',       desc: '심리 묘사와 문체의 깊이' },           en: { name: 'Literary Fiction', desc: 'Depth of prose and psychology' } },
+  { id: 'novel_romance',   icon: '💕', category: 'fiction',   swatch: '#E05F8E', kr: { name: '로맨스',       desc: '감정의 기복과 두 인물의 화학' },       en: { name: 'Romance',          desc: 'Emotional tension and chemistry' } },
+  { id: 'novel_thriller',  icon: '🔪', category: 'fiction',   swatch: '#2A2A3A', kr: { name: '스릴러',       desc: '긴장감과 반전의 속도전' },             en: { name: 'Thriller',         desc: 'Suspense, pace, and twists' } },
+  { id: 'novel_fantasy',   icon: '🧙', category: 'fiction',   swatch: '#6B4DA0', kr: { name: '판타지',       desc: '세계관의 일관성과 영웅의 여정' },     en: { name: 'Fantasy',          desc: 'World-building and hero journey' } },
+  { id: 'novel_scifi',     icon: '🚀', category: 'fiction',   swatch: '#2A6B8A', kr: { name: 'SF',           desc: '미래 상상과 기술-인간의 관계' },       en: { name: 'Sci-Fi',           desc: 'Future visions, tech vs humanity' } },
+  { id: 'novel_horror',    icon: '👻', category: 'fiction',   swatch: '#5A1A1A', kr: { name: '호러',         desc: '공포의 점진적 구축과 심리 압박' },     en: { name: 'Horror',           desc: 'Dread, atmosphere, psychological fear' } },
+  { id: 'novel_historical',icon: '🏛', category: 'fiction',   swatch: '#7A5A3A', kr: { name: '역사소설',     desc: '시대 배경의 진정성' },                 en: { name: 'Historical',       desc: 'Period authenticity and context' } },
+  { id: 'fairy_tale',      icon: '🧚', category: 'fiction',   swatch: '#6B8E5A', kr: { name: '동화',         desc: '단순한 언어와 교훈, 마법의 세계' },   en: { name: 'Fairy Tale',       desc: 'Simple language, magic, moral' } },
+  { id: 'ya_fiction',      icon: '🌱', category: 'fiction',   swatch: '#5A8A6B', kr: { name: '청소년 소설',  desc: '성장과 정체성, 첫 경험의 강렬함' },   en: { name: 'Young Adult',      desc: 'Coming-of-age and identity' } },
+  // Essay
+  { id: 'essay_personal',  icon: '✍', category: 'essay',     swatch: '#8A6F3D', kr: { name: '개인 에세이',  desc: '진솔한 경험에서 보편적 통찰로' },     en: { name: 'Personal Essay',   desc: 'Personal experience to universal truth' } },
+  { id: 'essay_critical',  icon: '🔍', category: 'essay',     swatch: '#3D5A8A', kr: { name: '비평 에세이',  desc: '논리와 근거, 비판적 사고' },           en: { name: 'Critical Essay',   desc: 'Logic, argument, critical thinking' } },
+  { id: 'essay_travel',    icon: '✈', category: 'essay',     swatch: '#3D8A7A', kr: { name: '여행기',       desc: '장소와 경험의 생생한 포착' },         en: { name: 'Travel Writing',   desc: 'Vivid capture of places and encounters' } },
+  // Journal
+  { id: 'journal',         icon: '📔', category: 'journal',   swatch: '#7A5A8A', kr: { name: '일기/저널',    desc: '솔직하고 자유로운 개인의 기록' },     en: { name: 'Journal',          desc: 'Honest, free personal record' } },
+  { id: 'journal_reflection',icon:'🌙',category: 'journal',  swatch: '#4A5A8A', kr: { name: '성찰 일기',    desc: '깊은 자기 성찰과 내면의 탐구' },      en: { name: 'Reflective Journal',desc: 'Deep self-reflection and inner exploration' } },
+  // Non-fiction
+  { id: 'memoir',          icon: '🕰', category: 'nonfiction',swatch: '#8A5A3D', kr: { name: '회고록',       desc: '실제 경험으로 쓴 삶의 이야기' },      en: { name: 'Memoir',           desc: 'True story, memory, meaning-making' } },
+  { id: 'article',         icon: '📰', category: 'nonfiction',swatch: '#3D3D5A', kr: { name: '기사/보도문',  desc: '사실 기반의 명료하고 객관적인 글' }, en: { name: 'Article / Report', desc: 'Fact-based, clear, objective' } },
+  { id: 'bio',             icon: '👤', category: 'nonfiction',swatch: '#5A5A3D', kr: { name: '소개문',       desc: '아이덴티티와 경험의 스토리텔링' },    en: { name: 'Bio / Introduction',desc: 'Identity and experience as story' } },
+  // Poetry
+  { id: 'poetry',          icon: '🌙', category: 'poetry',    swatch: '#B5527A', kr: { name: '시',           desc: '압축된 이미지와 리듬, 여백의 언어' }, en: { name: 'Poetry',           desc: 'Compressed image, rhythm, silence' } },
+  { id: 'prose_poetry',    icon: '🌿', category: 'poetry',    swatch: '#4A8A6B', kr: { name: '산문시',       desc: '산문의 흐름과 시적 감각의 결합' },    en: { name: 'Prose Poetry',     desc: 'Prose flow meets poetic sensibility' } },
+];
+
+export const FORMAT_AI_CONTEXT: Record<string, string> = {
+  novel_literary:   '순문학/문예소설. 문체의 완성도, 인물 심리의 깊이, 감각적 묘사, 인간 조건에 대한 통찰을 중시하세요.',
+  novel_romance:    '로맨스 소설. 두 인물의 감정적 화학작용, 갈등과 해소의 긴장감, 감정선의 자연스러운 발전이 핵심입니다.',
+  novel_thriller:   '스릴러/미스터리 소설. 긴장감 유지, 속도감 있는 문장, 복선과 반전이 핵심입니다. 매 장면이 독자를 다음 장으로 끌어야 합니다.',
+  novel_fantasy:    '판타지 소설. 세계관의 내적 일관성, 마법 시스템의 규칙 준수, 영웅의 여정 구조를 유지하세요.',
+  novel_scifi:      'SF 소설. 과학적/기술적 개념의 내적 일관성, 기술과 인간성의 관계, 미래 사회의 설득력 있는 묘사가 중요합니다.',
+  novel_horror:     '호러 소설. 공포의 점진적 구축, 독자의 불안감 조성, 심리적 공포와 실존적 위협을 균형 있게 다루세요.',
+  novel_historical: '역사 소설. 시대적 배경의 세부 묘사, 당시 언어와 사회상의 진정성, 역사적 사실과 허구의 균형을 유지하세요.',
+  fairy_tale:       '동화. 단순하고 아름다운 언어, 상징적 캐릭터(선/악의 대비), 교훈과 마법 요소, 아이들이 이해할 수 있는 명료한 구조를 유지하세요.',
+  ya_fiction:       '청소년 소설(YA). 성장과 자기발견, 또래 관계와 정체성, 첫 경험의 강렬함을 진솔하게 다루세요.',
+  essay_personal:   '개인 에세이. 진솔한 개인 경험에서 출발해 보편적 통찰로 확장하세요. 글쓴이의 목소리가 뚜렷해야 합니다.',
+  essay_critical:   '비평/분석 에세이. 논리적 구조, 근거와 논거의 체계적 전개, 비판적 사고가 핵심입니다.',
+  essay_travel:     '여행기. 장소와 사람의 생생한 묘사, 여행자의 시각과 발견, 이국적 디테일의 포착이 중요합니다.',
+  journal:          '일기/저널. 개인적이고 성찰적인 어조, 솔직하고 자유로운 표현, 그날의 감정과 생각을 여과 없이 담으세요.',
+  journal_reflection:'성찰 일기. 깊은 내면 탐구, 과거 경험의 재해석, 자기 이해를 위한 질문을 중심으로 쓰세요.',
+  memoir:           '회고록. 실제 경험을 바탕으로 한 이야기. 기억의 복잡성을 인정하며, 과거와 현재를 오가며 삶의 의미를 재구성하세요.',
+  article:          '기사/보도문. 명확하고 정확한 사실 전달, 역피라미드 구조(중요한 것 먼저), 객관적이고 간결한 문체를 사용하세요.',
+  bio:              '소개문/자기소개서. 명확한 아이덴티티 전달, 강점과 경험의 스토리텔링, 대상 독자에 맞는 어조를 사용하세요.',
+  poetry:           '시. 압축된 이미지와 언어, 리듬과 소리의 효과, 행 구분의 의미, 여백과 침묵을 의식하세요.',
+  prose_poetry:     '산문시. 산문의 자유로운 흐름과 시의 이미지·리듬감을 결합하세요.',
+};
 
 export interface Style {
   id: string; icon: string; hue: number; swatch: string;
