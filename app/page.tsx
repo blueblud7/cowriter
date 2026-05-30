@@ -221,7 +221,7 @@ export default function CoWriterApp() {
   }
 
   return (
-    <div className="app">
+    <div className="app" data-level={level === 'kids' ? 'beginner' : level}>
       <Sidebar
         t={t} lang={lang} level={level}
         chapters={chapters} currentChapter={currentChapterId ?? ''}
