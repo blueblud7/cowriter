@@ -13,11 +13,12 @@ interface DiffViewProps {
   chapterTitle?: string;
   tone?: string;
   length?: string;
+  level?: string;
   onAccept: (text: string) => void;
   onClose: () => void;
 }
 
-export function DiffView({ t, lang, styleId, styles, sample, notes, chapterTitle, tone = 'neutral', length = 'keep', onAccept, onClose }: DiffViewProps) {
+export function DiffView({ t, lang, styleId, styles, sample, notes, chapterTitle, tone = 'neutral', length = 'keep', level, onAccept, onClose }: DiffViewProps) {
   const style = styles.find(s => s.id === styleId) || styles[0];
   const rawLines = sample.raw.split(/(?<=[.!?。!?])\s+/).filter(Boolean);
   const [aiResult, setAiResult] = useState<string | null>(null);
@@ -37,7 +38,7 @@ export function DiffView({ t, lang, styleId, styles, sample, notes, chapterTitle
         const res = await fetch('/api/transform', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: sample.raw, style: styleId, lang, tone, length }),
+          body: JSON.stringify({ text: sample.raw, style: styleId, lang, tone, length, level }),
         });
         if (!res.ok) {
           const d = await res.json().catch(() => ({}));
@@ -62,7 +63,7 @@ export function DiffView({ t, lang, styleId, styles, sample, notes, chapterTitle
     })();
 
     return () => { cancelled = true; };
-  }, [sample.raw, styleId, lang, tone, length]);
+  }, [sample.raw, styleId, lang, tone, length, level]);
 
   const styledRaw = aiResult ?? '';
   const styledLines = styledRaw.split(/(?<=[.!?。!?])\s+/).filter(Boolean);

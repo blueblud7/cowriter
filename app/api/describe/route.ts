@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { NextRequest, NextResponse } from 'next/server';
 import { FORMAT_AI_CONTEXT } from '@/lib/data';
+import { levelGuidance } from '@/lib/level-guidance';
 
 let client: OpenAI | null = null;
 function getClient() {
@@ -10,7 +11,7 @@ function getClient() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { text, lang, format } = await req.json();
+    const { text, lang, format, level } = await req.json();
     if (!text?.trim()) return NextResponse.json({ versions: {} });
 
     const formatCtx = format ? FORMAT_AI_CONTEXT[format] : '';
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest) {
       max_completion_tokens: 1400,
       messages: [{
         role: 'user',
-        content: `당신은 감각적 묘사의 전문가입니다.${formatCtx ? ` ${formatCtx}` : ''}
+        content: `${levelGuidance(level, lang)}당신은 감각적 묘사의 전문가입니다.${formatCtx ? ` ${formatCtx}` : ''}
 
 아래 텍스트를 6가지 감각/표현 방식으로 각각 다시 써주세요. 원문과 비슷한 길이를 유지하세요.
 

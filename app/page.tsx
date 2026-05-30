@@ -277,7 +277,7 @@ export default function CoWriterApp() {
             styleId={selectedStyleId} styles={STYLES}
             sample={{ ...editorSample, raw: diffBodyRaw || editorSample.raw }} notes={notes}
             chapterTitle={currentChapter?.title}
-            tone={selectedTone} length={selectedLength}
+            tone={selectedTone} length={selectedLength} level={level}
             onAccept={handleAcceptTransform}
             onClose={() => setRoute('editor')}
           />

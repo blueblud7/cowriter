@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { NextRequest } from 'next/server';
+import { levelGuidance } from '@/lib/level-guidance';
 
 let client: OpenAI | null = null;
 function getClient() {
@@ -22,7 +23,7 @@ const STYLE_PROMPTS: Record<string, string> = {
 
 export async function POST(req: NextRequest) {
   try {
-    const { text, style, tone, length, lang } = await req.json();
+    const { text, style, tone, length, lang, level } = await req.json();
 
     if (text == null || !style) {
       return new Response(JSON.stringify({ error: 'Missing text or style' }), { status: 400 });
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
       stream: true,
       messages: [{
         role: 'user',
-        content: `${styleGuide}${toneNote}${lengthNote}${langNote}
+        content: `${levelGuidance(level, lang)}${styleGuide}${toneNote}${lengthNote}${langNote}
 
 Return ONLY the rewritten text — no preamble, no explanation, no quotes.
 

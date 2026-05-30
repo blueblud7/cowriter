@@ -27,7 +27,7 @@ export interface Premise {
   genre: string; logline: string; themes: string[];
   tone: string; pov: string; tense: string; setting: string;
 }
-export type Level = 'beginner' | 'growing' | 'pro';
+export type Level = 'kids' | 'beginner' | 'growing' | 'pro';
 export type Palette = 'paper' | 'sunset' | 'sage' | 'twilight';
 export type Typeset = 'manuscript' | 'editorial' | 'modern';
 export type Route = 'auth' | 'onboarding' | 'dashboard' | 'editor' | 'diff' | 'analysis' | 'focus' | 'bible';
@@ -113,6 +113,7 @@ export interface T {
   nav_works: string; nav_drafts: string; nav_archive: string; nav_trash: string; nav_bible: string;
   ob_greet_top: string; ob_greet: string; ob_q: string; ob_sub: string;
   ob_start: string; ob_skip: string;
+  lvl_kids_name: string; lvl_kids_desc: string; lvl_kids_features: string[];
   lvl_beginner_name: string; lvl_beginner_desc: string; lvl_beginner_features: string[];
   lvl_growing_name: string; lvl_growing_desc: string; lvl_growing_features: string[];
   lvl_pro_name: string; lvl_pro_desc: string; lvl_pro_features: string[];
@@ -309,6 +310,7 @@ export const T: Record<Lang, T> = {
     ob_q: '나는 어떤 작가일까?',
     ob_sub: '언제든 바꿀 수 있어요. 처음 화면을 어떻게 보여줄지 정하는 것뿐이에요.',
     ob_start: '시작하기', ob_skip: '나중에',
+    lvl_kids_name: '어린이예요', lvl_kids_desc: '쉬운 말로 도와주고, 내가 직접 쓰도록 칭찬과 힌트를 줘요', lvl_kids_features: ['쉬운 낱말과 큰 글씨', '칭찬과 다정한 힌트', '안전하고 따뜻한 도움'],
     lvl_beginner_name: '이제 막 시작해요', lvl_beginner_desc: '빈 페이지가 무섭고, 어디서부터 써야 할지 모를 때', lvl_beginner_features: ['따뜻한 스타터 카드', '쉬운 3가지 스타일', '큰 글씨와 격려'],
     lvl_growing_name: '내 스타일을 찾는 중', lvl_growing_desc: '쓰는 일이 익숙해지고, 내 목소리를 다듬고 싶을 때', lvl_growing_features: ['10가지 스타일', '간단한 분석', '챕터 관리'],
     lvl_pro_name: '오래 써온 작가예요', lvl_pro_desc: '세밀한 컨트롤과 방해 없는 집중이 필요할 때', lvl_pro_features: ['세밀한 톤·길이 제어', '집중 모드', '키보드 단축키'],
@@ -347,6 +349,7 @@ export const T: Record<Lang, T> = {
     ob_q: 'What kind of writer are you?',
     ob_sub: 'You can change this anytime. It just sets how the first screens feel.',
     ob_start: 'Get started', ob_skip: 'Skip for now',
+    lvl_kids_name: "I'm a kid", lvl_kids_desc: 'Easy words, lots of praise, and gentle hints so you write it yourself', lvl_kids_features: ['Simple words, bigger type', 'Praise and kind hints', 'Safe, warm help'],
     lvl_beginner_name: 'Just starting out', lvl_beginner_desc: "When the blank page feels scary and you don't know where to begin", lvl_beginner_features: ['Warm starter cards', 'Three easy styles', 'Bigger type, kind nudges'],
     lvl_growing_name: 'Finding my voice', lvl_growing_desc: 'Writing is starting to feel natural and I want to refine my tone', lvl_growing_features: ['Ten styles', 'Light analysis', 'Chapter management'],
     lvl_pro_name: 'Been writing a long time', lvl_pro_desc: 'I want fine control and a distraction-free room of my own', lvl_pro_features: ['Granular tone & length', 'Focus mode', 'Keyboard shortcuts'],

@@ -21,6 +21,7 @@ interface SidebarProps {
 
 export function Sidebar({ t, lang, level, chapters, currentChapter, setCurrentChapter, route, setRoute, onLevelClick, onNewChapter, onExport, userName, userEmail, onSettings }: SidebarProps) {
   const levelLabels: Record<Level, string> = {
+    kids:     t.lvl_kids_name,
     beginner: t.lvl_beginner_name,
     growing:  t.lvl_growing_name,
     pro:      t.lvl_pro_name,
@@ -55,14 +56,14 @@ export function Sidebar({ t, lang, level, chapters, currentChapter, setCurrentCh
           <span>{t.nav_drafts}</span>
           <span className="nav-count">{chapters.filter(c => c.status !== 'new').length}</span>
         </button>
-        {level !== 'beginner' && (
+        {level !== 'beginner' && level !== 'kids' && (
           <button className="nav-item" data-active={route === 'bible' ? '1' : '0'}
                   onClick={() => setRoute('bible')}>
             <span className="nav-icon">✺</span>
             <span>{t.nav_bible}</span>
           </button>
         )}
-        {level !== 'beginner' && (
+        {level !== 'beginner' && level !== 'kids' && (
           <button className="nav-item" data-active={route === 'analysis' ? '1' : '0'}
                   onClick={() => setRoute('analysis')}>
             <span className="nav-icon">⌖</span>
@@ -245,7 +246,7 @@ export function DashboardScreen({ t, lang, level, chapters, setCurrentChapter, s
         <div className="dash-starters-section">
           <h2 className="dash-h2">{t.dash_starters}</h2>
           <div className="starter-grid">
-            {starters.slice(0, level === 'beginner' ? 6 : 3).map((s, i) => (
+            {starters.slice(0, (level === 'beginner' || level === 'kids') ? 6 : 3).map((s, i) => (
               <button key={i} className="starter-card"
                       onClick={() => { if (chapters[0]) { setCurrentChapter(chapters[0].id); setRoute('editor'); } }}>
                 <span className="starter-tag">{s.tag}</span>

@@ -276,13 +276,13 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
       const res = await fetch('/api/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, lang, format: writingFormat }),
+        body: JSON.stringify({ text, lang, level, format: writingFormat }),
       });
       const data = await res.json();
       if (data.completion) setSuggestion(data.completion);
     } catch {}
     setSuggesting(false);
-  }, [lang]);
+  }, [lang, level]);
 
   const handleBodyChange = (val: string) => {
     setBody(val);
@@ -334,13 +334,13 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
       const res = await fetch('/api/check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: body, bible, lang, format: writingFormat }),
+        body: JSON.stringify({ text: body, bible, lang, level, format: writingFormat }),
       });
       const data = await res.json();
       setCheckIssues(data.issues || []);
     } catch { setCheckIssues([]); }
     setChecking(false);
-  }, [body, lang]);
+  }, [body, lang, level]);
 
   const takeSnapshot = useCallback(() => {
     if (!chapterId || !body.trim()) return;
@@ -377,13 +377,13 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
       const res = await fetch('/api/guide', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: body, allText, bible, lang, format: writingFormat, loreContext }),
+        body: JSON.stringify({ text: body, allText, bible, lang, level, format: writingFormat, loreContext }),
       });
       const data = await res.json();
       setGuideData(data);
     } catch { setGuideData(null); }
     setGuiding(false);
-  }, [body, lang, allChapterBodies]);
+  }, [body, lang, level, allChapterBodies]);
 
   const startAutoWrite = useCallback(async () => {
     if (!body.trim() || autoWriting) return;
@@ -400,7 +400,7 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
       const res = await fetch('/api/autowrite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: body, allText, bible, lang, format: writingFormat, loreContext }),
+        body: JSON.stringify({ text: body, allText, bible, lang, level, format: writingFormat, loreContext }),
         signal: controller.signal,
       });
       const reader = res.body?.getReader();
@@ -427,7 +427,7 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
       isAutoWritingRef.current = false;
       autoWriteAbort.current = null;
     }
-  }, [body, lang, allChapterBodies, autoWriting, onBodyChange, onSave]);
+  }, [body, lang, level, allChapterBodies, autoWriting, onBodyChange, onSave]);
 
   const stopAutoWrite = useCallback(() => {
     autoWriteAbort.current?.abort();
@@ -449,14 +449,14 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
       const res = await fetch('/api/describe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, lang, format: writingFormat }),
+        body: JSON.stringify({ text, lang, level, format: writingFormat }),
       });
       const data = await res.json();
       setDescribeData(data.versions || data);
       setDescribeTab('sight');
     } catch { setDescribeData(null); }
     setDescribing(false);
-  }, [lang, writingFormat]);
+  }, [lang, level, writingFormat]);
 
   const openShrink = useCallback(async () => {
     if (!body.trim() || body.trim().length < 30) return;
@@ -467,13 +467,13 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
       const res = await fetch('/api/shrink', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: body, lang }),
+        body: JSON.stringify({ text: body, lang, level }),
       });
       const data = await res.json();
       setShrinkData(data);
     } catch { setShrinkData(null); }
     setShrinking(false);
-  }, [body, lang]);
+  }, [body, lang, level]);
 
   const toggleReadToMe = useCallback(() => {
     if (reading) {
@@ -501,13 +501,13 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
       const res = await fetch('/api/proofread', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: body, lang }),
+        body: JSON.stringify({ text: body, lang, level }),
       });
       const data = await res.json();
       setProofIssues(data.issues || []);
     } catch { setProofIssues([]); }
     setProofreading(false);
-  }, [body, lang]);
+  }, [body, lang, level]);
 
   const generateSummary = useCallback(async () => {
     if (!body.trim() || !chapterId) return;
@@ -516,7 +516,7 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
       const res = await fetch('/api/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: body, lang }),
+        body: JSON.stringify({ text: body, lang, level }),
       });
       const data = await res.json();
       if (data.summary) {
@@ -525,7 +525,7 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
       }
     } catch {}
     setSummarizing(false);
-  }, [body, lang, chapterId]);
+  }, [body, lang, level, chapterId]);
 
   const getMatches = useCallback((query: string): number[] => {
     if (!query) return [];
@@ -587,7 +587,10 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
 
   const wordCount = body.trim() ? body.trim().split(/\s+/).length : 0;
   const charCount = body.length;
-  const visibleStyles = level === 'beginner'
+  // Kids share the gentlest UI with beginners: few simple styles, bigger type,
+  // starter cards and encouragement.
+  const simpleMode = level === 'kids' || level === 'beginner';
+  const visibleStyles = simpleMode
     ? styles.filter(s => ['literary', 'minimalist', 'conversational'].includes(s.id))
     : styles;
   const filteredStyles = styleQuery
@@ -831,7 +834,7 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
         </div>
       )}
 
-      <div className={`editor-shell editor-shell-${level}`}>
+      <div className={`editor-shell editor-shell-${level === 'kids' ? 'beginner' : level}`}>
         {/* Canvas stage */}
         <div ref={stageRef} className="manuscript-stage"
              onMouseDown={onStageMouseDown}
@@ -914,7 +917,7 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
             </div>
           )}
 
-          {level === 'beginner' && (
+          {simpleMode && (
             <div className="ed-starters">
               <div className="ed-starters-head">
                 <InkiMascot size={32} mood="encouraging" />
@@ -1336,7 +1339,7 @@ export function EditorScreen({ t, lang, level, chapter, sample, styles, starters
           </div>
         )}
 
-        {level !== 'beginner' && (
+        {!simpleMode && (
           <aside className="ed-rail">
             <div className="rail-section">
               <div className="rail-h">
@@ -1439,7 +1442,7 @@ interface StylePickerProps {
 }
 
 export function StylePicker({ t, lang, styles, sample, level, onClose, onApply }: StylePickerProps) {
-  const visible = level === 'beginner'
+  const visible = (level === 'kids' || level === 'beginner')
     ? styles.filter(s => ['literary', 'minimalist', 'conversational'].includes(s.id))
     : styles;
   const [idx, setIdx] = useState(0);

@@ -24,6 +24,7 @@ export function OnboardingScreen({ t, lang, level, setLevel, onDone, onSkip, gam
   const back = () => setStep(Math.max(0, step - 1));
 
   const LEVELS = [
+    { id: 'kids'     as Level, emoji: '🐣', name: t.lvl_kids_name,     desc: t.lvl_kids_desc,     features: t.lvl_kids_features },
     { id: 'beginner' as Level, emoji: '✿', name: t.lvl_beginner_name, desc: t.lvl_beginner_desc, features: t.lvl_beginner_features },
     { id: 'growing'  as Level, emoji: '✦', name: t.lvl_growing_name,  desc: t.lvl_growing_desc,  features: t.lvl_growing_features },
     { id: 'pro'      as Level, emoji: '◆', name: t.lvl_pro_name,      desc: t.lvl_pro_desc,      features: t.lvl_pro_features },

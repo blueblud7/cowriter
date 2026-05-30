@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { NextRequest, NextResponse } from 'next/server';
+import { levelGuidance } from '@/lib/level-guidance';
 
 let client: OpenAI | null = null;
 function getClient() {
@@ -9,7 +10,7 @@ function getClient() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { text, lang } = await req.json();
+    const { text, lang, level } = await req.json();
     if (!text?.trim() || text.trim().length < 30) return NextResponse.json({ summary: '' });
 
     const isKr = lang === 'kr';
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest) {
       max_completion_tokens: 120,
       messages: [{
         role: 'user',
-        content: `아래 챕터를 ${isKr ? '한국어' : '영어'} 1-2문장으로 요약하세요. 핵심 사건과 감정만. 설명 없이 요약문만 반환.
+        content: `${levelGuidance(level, lang)}아래 챕터를 ${isKr ? '한국어' : '영어'} 1-2문장으로 요약하세요. 핵심 사건과 감정만. 설명 없이 요약문만 반환.
 
 ${text.slice(0, 3000)}`,
       }],

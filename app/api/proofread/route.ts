@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { NextRequest, NextResponse } from 'next/server';
+import { levelGuidance } from '@/lib/level-guidance';
 
 let client: OpenAI | null = null;
 function getClient() {
@@ -9,7 +10,7 @@ function getClient() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { text, lang } = await req.json();
+    const { text, lang, level } = await req.json();
     if (!text?.trim() || text.trim().length < 20) return NextResponse.json({ issues: [] });
 
     const isKr = lang === 'kr';
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest) {
       max_completion_tokens: 800,
       messages: [{
         role: 'user',
-        content: `당신은 글쓰기 교정 AI입니다. 아래 ${isKr ? '한국어' : '영어'} 텍스트에서 문제 있는 표현을 찾아 JSON 배열로만 반환하세요.
+        content: `${levelGuidance(level, lang)}당신은 글쓰기 교정 AI입니다. 아래 ${isKr ? '한국어' : '영어'} 텍스트에서 문제 있는 표현을 찾아 JSON 배열로만 반환하세요.
 
 찾아야 할 유형:
 - "cliche": 진부하거나 너무 많이 쓰인 표현 (예: "눈물이 주르르", "심장이 쿵쾅", "as cold as ice", "at the end of the day")
