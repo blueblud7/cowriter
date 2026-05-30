@@ -331,8 +331,26 @@ export default function CoWriterApp() {
         />
       )}
 
+      {/* Mobile bottom tab bar (shown ≤720px via CSS; sidebar is hidden there) */}
+      <nav className="mobile-tabbar">
+        <button data-active={route === 'dashboard' ? '1' : '0'} onClick={() => setRoute('dashboard')}>
+          <span className="tab-icon">⌂</span>{lang === 'kr' ? '홈' : 'Home'}
+        </button>
+        <button data-active={route === 'editor' ? '1' : '0'} onClick={() => setRoute('editor')}>
+          <span className="tab-icon">✎</span>{lang === 'kr' ? '쓰기' : 'Write'}
+        </button>
+        {level !== 'kids' && level !== 'beginner' && (
+          <button data-active={route === 'analysis' ? '1' : '0'} onClick={() => setRoute('analysis')}>
+            <span className="tab-icon">⌖</span>{lang === 'kr' ? '분석' : 'Analysis'}
+          </button>
+        )}
+        <button data-active={route === 'diff' ? '1' : '0'} onClick={handleTransform}>
+          <span className="tab-icon">✦</span>{lang === 'kr' ? '변환' : 'Style'}
+        </button>
+      </nav>
+
       {/* Floating settings panel */}
-      <div style={{ position: 'fixed', bottom: 16, right: 16, zIndex: 200 }}>
+      <div className="settings-fab" style={{ position: 'fixed', bottom: 16, right: 16, zIndex: 200 }}>
         <button className="btn btn-ghost"
                 style={{ fontSize: 18, padding: '6px 10px', borderRadius: 8 }}
                 onClick={() => setShowSettings(v => !v)} aria-label="Settings">⚙</button>

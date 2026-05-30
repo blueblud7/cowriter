@@ -1,9 +1,18 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "CoWriter — 쓰는 일이 외롭지 않도록",
   description: "AI-powered creative writing companion",
+};
+
+// Mobile-web essentials: render at device width (not desktop-zoomed-out), and
+// use viewportFit 'cover' so the bottom tab bar's env(safe-area-inset-bottom)
+// works on notched phones. Pinch-zoom left enabled for accessibility.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

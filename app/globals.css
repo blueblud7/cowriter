@@ -229,7 +229,11 @@ body::before {
   .mobile-tabbar button .tab-icon { font-size: 18px; line-height: 1; }
 }
 .mobile-tabbar { display: none; }
-@media (max-width: 720px) { .mobile-tabbar { display: flex; } }
+@media (max-width: 720px) {
+  .mobile-tabbar { display: flex; }
+  /* Keep the floating settings button clear of the bottom tab bar */
+  .settings-fab { bottom: calc(76px + env(safe-area-inset-bottom)) !important; }
+}
 
 .app[data-level="beginner"] { --sidebar-w: 240px; }
 .app[data-level="pro"] { --sidebar-w: 220px; }
