@@ -212,7 +212,27 @@ body::before {
 @media (max-width: 720px) {
   .app { grid-template-columns: 1fr; }
   .sidebar { display: none; }
-  .topbar { padding: 10px 16px; }
+  /* Editor toolbar holds ~10 actions — let it scroll horizontally instead of
+     clipping, and keep each button a comfortable tap target (incl. ◐ focus). */
+  .topbar {
+    padding: 8px 14px; gap: 10px; flex-wrap: nowrap;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .topbar::-webkit-scrollbar { display: none; }
+  .topbar > * { flex: 0 0 auto; }
+  .topbar .crumb { display: none; } /* hide breadcrumb to free space on mobile */
+  .icon-btn { width: 44px; height: 44px; }
+  /* Make the distraction-free Focus entry discoverable while scrolling tools */
+  .icon-btn[aria-label="focus"] {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg-elev));
+  }
+  .btn { min-height: 44px; }
+  .mobile-tabbar button { min-height: 44px; }
+  /* iOS Safari zooms in when a focused input's font is < 16px — bump them. */
+  .auth-input, .frame-row-input { font-size: 16px; }
   .mobile-tabbar {
     position: fixed; left: 0; right: 0; bottom: 0; height: 64px;
     background: color-mix(in srgb, var(--bg-elev) 92%, transparent);

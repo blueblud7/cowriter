@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Full-bleed background so the icon survives any maskable crop; the "C"
+       sits within the central ~80% safe zone. -->
+  <rect width="512" height="512" fill="#8B6FB8"/>
+  <text x="50%" y="52%" dominant-baseline="central" text-anchor="middle"
+        font-family="Newsreader, Georgia, 'Noto Serif KR', serif" font-size="240"
+        font-weight="500" fill="#FFFFFF">C</text>
+</svg>
